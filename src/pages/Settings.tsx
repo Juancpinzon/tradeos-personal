@@ -4,7 +4,7 @@
 // Datos mock — sin llamadas reales (Fase 6 visual)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Settings as SettingsIcon,
   Eye,
@@ -19,8 +19,12 @@ import {
   TrendingUp,
   Cpu,
   BarChart2,
+  FileUp,
+  Clock,
 } from 'lucide-react'
 import { formatCurrency } from '../lib/formatters'
+import ImporterModal from '../components/importer/ImporterModal'
+import { supabase } from '../lib/supabase'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos locales
@@ -530,6 +534,28 @@ export default function Settings() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [savedMsg,    setSavedMsg]    = useState(false)
 
+  // Section D: Import History
+  const [showImporter, setShowImporter] = useState(false)
+  const [importHistory, setImportHistory] = useState<{
+    id: string; filename: string; imported_rows: number;
+    status: string; created_at: string;
+  }[]>([])
+
+  useEffect(() => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('import_sessions')
+        .select('id,filename,imported_rows,status,created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5)
+      if (data) setImportHistory(data)
+    }
+    load()
+  }, [showImporter])
+
   function handleModeClick(m: TradingMode) {
     if (m === 'live' && mode === 'paper') {
       setShowConfirm(true)
@@ -554,6 +580,7 @@ export default function Settings() {
 
   return (
     <>
+      {showImporter && <ImporterModal onClose={() => setShowImporter(false)} />}
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes fade-up {
@@ -828,6 +855,72 @@ export default function Settings() {
                   <><Save size={14} strokeWidth={2.5} /> Guardar configuración</>
                 )}
               </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── SECTION D: Import History ─── */}
+        <section style={{ marginBottom: '2.5rem' }}>
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1.5rem' }}>
+            <SectionHeader
+              title="Historial de operaciones"
+              subtitle="Cargá operaciones previas desde Excel para alimentar el Journal con datos reales."
+              icon={FileUp}
+            />
+            <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '0.625rem', padding: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+                <div>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: '0 0 0.375rem' }}>
+                    Importar desde Excel (.xlsx)
+                  </p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                    Columnas requeridas: <span style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--text-secondary)' }}>Ticker | Movimiento | Cantidad | Precio | Fecha</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowImporter(true)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                    padding: '0.5625rem 1.125rem', borderRadius: '0.375rem', border: 'none',
+                    backgroundColor: 'var(--color-primary)', color: 'white',
+                    fontFamily: '"Syne", sans-serif', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer',
+                  }}
+                >
+                  <FileUp size={14} strokeWidth={2} />
+                  Importar desde Excel
+                </button>
+              </div>
+
+              {importHistory.length > 0 && (
+                <div>
+                  <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 0.625rem' }}>Importaciones anteriores</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {importHistory.map(h => (
+                      <div key={h.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0.875rem', borderRadius: '0.375rem', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Clock size={13} strokeWidth={1.75} style={{ color: 'var(--text-muted)' }} />
+                          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{h.filename}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            {new Date(h.created_at).toLocaleDateString('es-AR')}
+                          </span>
+                          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem', color: '#10b981' }}>
+                            {h.imported_rows} importadas
+                          </span>
+                          <span style={{
+                            padding: '0.15rem 0.5rem', borderRadius: '0.2rem', fontSize: '0.625rem', fontWeight: 600,
+                            backgroundColor: h.status === 'completed' ? 'rgba(16,185,129,0.1)' : 'var(--bg-elevated)',
+                            color: h.status === 'completed' ? '#10b981' : 'var(--text-muted)',
+                            border: h.status === 'completed' ? '1px solid rgba(16,185,129,0.25)' : '1px solid var(--border-default)',
+                            fontFamily: '"Syne", sans-serif', textTransform: 'uppercase',
+                          }}>{h.status}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </section>

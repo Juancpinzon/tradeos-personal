@@ -922,3 +922,49 @@ vercel --prod
 - **Estrategias automatizadas**: reglas if/then para órdenes programáticas (paper only primero)
 - **Mobile PWA**: versión táctil optimizada
 - **Multi-usuario SaaS**: RLS ya está en Supabase; habilitar registro público
+
+---
+
+## 🔄 Fase 8: Importador de Historial (agregada post-deploy)
+
+### Nuevo módulo: Import History
+
+**Problema que resuelve**: el usuario tiene historial de operaciones en Excel previo a TradeOS. Sin importarlo, el Journal y las estadísticas arrancan desde cero y no reflejan la experiencia real del trader.
+
+**Componentes nuevos:**
+
+```
+src/
+├── components/importer/
+│   ├── ImporterModal.tsx        # Modal 4 pasos: upload → preview → importing → done
+│   └── FormatGuide.tsx          # Guía colapsable de formato + plantilla descargable
+├── hooks/
+│   └── useImporter.ts           # Estado del importador + función importTrades()
+└── lib/
+    └── importParser.ts          # Parser de Excel: detecta formato y normaliza trades
+```
+
+**Nueva dependencia:** `xlsx` (lee .xlsx en el frontend sin backend)
+
+**Nueva migration:** `009_import_history.sql` — tabla `import_sessions`
+
+**Formatos soportados:**
+- Formato propio del usuario: `Ticker | Movimiento | Cantidad | Precio | Fecha`
+- Formato genérico: `Symbol | Side | Qty | Price | Date`
+
+**Detección de asset_class:**
+- Símbolo con `/` o sufijo USDT/BTC/ETH → `crypto`
+- Resto → `equity`
+
+**Integración con módulos existentes:**
+- Las operaciones importadas se insertan en tabla `orders` con status `filled`
+- Si el usuario activa el checkbox, se crean entradas en `journal_entries`
+- Las estadísticas de `JournalStats` se recalculan automáticamente
+- Las órdenes importadas tienen badge "Importado" en `/history`
+- Filtro nuevo en History: Todas | Ejecutadas | Importadas
+
+**Acceso:** Settings → sección "Historial" → botón "Importar desde Excel"
+
+**Regla crítica:** No se puede importar el mismo archivo dos veces. Validar por filename + fecha en `import_sessions` antes de procesar.
+
+**Plantilla:** `public/template_historial.xlsx` generada on-demand con la librería xlsx.

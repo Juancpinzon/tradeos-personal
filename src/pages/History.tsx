@@ -12,7 +12,7 @@ import { formatCurrency } from '../lib/formatters'
 // Mock data
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MOCK_ORDERS: (Order & { risk_amount?: number })[] = [
+const MOCK_ORDERS: (Order & { risk_amount?: number; imported?: boolean })[] = [
   {
     id: 'o1', user_id: 'u', broker_order_id: 'alp-001', broker: 'alpaca',
     symbol: 'AAPL', side: 'buy', order_type: 'market', qty: 45,
@@ -389,6 +389,7 @@ export default function History() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterBroker, setFilterBroker] = useState<string>('all')
   const [filterSide,   setFilterSide]   = useState<string>('all')
+  const [filterSource, setFilterSource] = useState<string>('all')
 
   // Sort
   const [sortKey, setSortKey] = useState<SortKey>('submitted_at')
@@ -418,6 +419,11 @@ export default function History() {
     }
     if (filterSide !== 'all') {
       list = list.filter(o => o.side === filterSide)
+    }
+    if (filterSource === 'imported') {
+      list = list.filter(o => (o as Order & { imported?: boolean }).imported)
+    } else if (filterSource === 'executed') {
+      list = list.filter(o => !(o as Order & { imported?: boolean }).imported)
     }
 
     list.sort((a, b) => {
@@ -545,6 +551,12 @@ export default function History() {
             <option value="buy">Buy</option>
             <option value="sell">Sell</option>
           </select>
+
+          <select value={filterSource} onChange={e => setFilterSource(e.target.value)} style={selectStyle}>
+            <option value="all">Mostrar: Todas</option>
+            <option value="executed">Ejecutadas</option>
+            <option value="imported">Importadas</option>
+          </select>
         </div>
 
         {/* Table */}
@@ -615,6 +627,15 @@ export default function History() {
                           }}>
                             {order.asset_class === 'crypto' ? 'CRYPTO' : 'EQUITY'}
                           </span>
+                          {(order as Order & { imported?: boolean }).imported && (
+                            <span style={{
+                              fontSize: '0.5625rem', fontWeight: 700,
+                              backgroundColor: 'rgba(139,92,246,0.12)',
+                              border: '1px solid rgba(139,92,246,0.3)',
+                              color: '#a78bfa', borderRadius: '0.2rem',
+                              padding: '0.1rem 0.3rem', textTransform: 'uppercase', letterSpacing: '0.04em',
+                            }}>Importado</span>
+                          )}
                         </div>
                       </td>
 
