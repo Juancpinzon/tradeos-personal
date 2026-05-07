@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Set-Location \"d:\\\\OneDrive\\\\Desktop\\\\Apps\\\\tradeos-personal\" ; @\\(\"src\", \"supabase\", \"src/lib\", \"src/hooks\", \"src/types\"\\) | ForEach-Object { if \\(Test-Path $_\\) { Write-Host \"EXISTS: $_\" } else { Write-Host \"MISSING: $_\" } })"
+    ]
+  }
+}
