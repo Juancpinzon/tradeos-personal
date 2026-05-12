@@ -41,20 +41,29 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders() })
   }
 
-  // ── JWT validation — PRIMER PASO en toda ruta ───────────────────────────
+  // ── DIAGNÓSTICO: loguear qué llega ──────────────────────────────────────
+  console.log("[alpaca-proxy] method:", req.method, "url:", req.url)
+  console.log("[alpaca-proxy] auth header prefix:", req.headers.get("Authorization")?.substring(0, 30) ?? "MISSING")
+  console.log("[alpaca-proxy] SUPABASE_URL defined:", !!Deno.env.get("SUPABASE_URL"))
+  console.log("[alpaca-proxy] ANON_KEY defined:", !!Deno.env.get("SUPABASE_ANON_KEY"))
+
+  // ── Verificar header Authorization ───────────────────────────────────────
   const authHeader = req.headers.get("Authorization")
-  if (!authHeader) return errJson("Missing Authorization header", 401)
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return errJson("Missing or malformed Authorization header", 401)
+  }
 
   const supabaseUrl     = Deno.env.get("SUPABASE_URL")!
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!
   const supabaseSvcKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
-  // Extraer el token y pasarlo explícitamente a getUser(token)
-  // Pasar el token directamente evita el problema de sesión vacía
-  // en clientes serverless recién creados.
-  const jwt = authHeader.replace("Bearer ", "")
+  const jwt = authHeader.slice(7) // quitar "Bearer "
+  console.log("[alpaca-proxy] JWT segments:", jwt.split(".").length, "| prefix:", jwt.substring(0, 20))
+
   const anonClient = createClient(supabaseUrl, supabaseAnonKey)
   const { data: { user }, error: authError } = await anonClient.auth.getUser(jwt)
+  console.log("[alpaca-proxy] getUser result — user:", user?.id ?? "null", "| error:", authError?.message ?? "none")
+
   if (authError || !user) {
     return errJson(`Unauthorized: ${authError?.message ?? "no user"}`, 401)
   }

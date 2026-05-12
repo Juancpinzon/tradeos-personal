@@ -27,6 +27,8 @@ export interface UsePortfolioReturn {
 
 async function getToken(): Promise<string> {
   const { data: { session }, error } = await supabase.auth.getSession()
+  console.log('[usePortfolio] session present:', !!session, '| access_token prefix:', session?.access_token?.substring(0, 20) ?? 'MISSING')
+  console.log('[usePortfolio] session error:', error?.message ?? 'none')
   if (error || !session?.access_token) {
     throw new Error('No hay sesión activa. Iniciá sesión nuevamente.')
   }
@@ -35,11 +37,15 @@ async function getToken(): Promise<string> {
 
 async function alpacaGet<T>(path: string): Promise<T> {
   const token = await getToken()
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/alpaca-proxy${path}`, {
+  const url = `${SUPABASE_URL}/functions/v1/alpaca-proxy${path}`
+  console.log('[usePortfolio] calling:', url)
+  const res = await fetch(url, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   })
+  console.log('[usePortfolio] response status:', res.status)
   const json = await res.json() as Record<string, unknown>
+  console.log('[usePortfolio] response body:', JSON.stringify(json).substring(0, 120))
   if (!res.ok) {
     const msg = (json['error'] as string | undefined) ?? `HTTP ${res.status}`
     throw new Error(msg)
