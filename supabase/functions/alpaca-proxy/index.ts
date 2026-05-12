@@ -41,41 +41,63 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders() })
   }
 
-  // ── DIAGNÓSTICO: loguear qué llega ──────────────────────────────────────
-  console.log("[alpaca-proxy] method:", req.method, "url:", req.url)
-  console.log("[alpaca-proxy] auth header prefix:", req.headers.get("Authorization")?.substring(0, 30) ?? "MISSING")
-  console.log("[alpaca-proxy] SUPABASE_URL defined:", !!Deno.env.get("SUPABASE_URL"))
-  console.log("[alpaca-proxy] ANON_KEY defined:", !!Deno.env.get("SUPABASE_ANON_KEY"))
-
-  // ── Verificar header Authorization ───────────────────────────────────────
-  const authHeader = req.headers.get("Authorization")
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return errJson("Missing or malformed Authorization header", 401)
-  }
-
   const supabaseUrl     = Deno.env.get("SUPABASE_URL")!
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!
   const supabaseSvcKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
-  const jwt = authHeader.slice(7) // quitar "Bearer "
-  console.log("[alpaca-proxy] JWT segments:", jwt.split(".").length, "| prefix:", jwt.substring(0, 20))
+  // ── Routing (primero, para exponer /debug sin auth) ───────────────────────
+  const url = new URL(req.url)
+  const pathParts = url.pathname.split("/alpaca-proxy")
+  const subPath   = pathParts[1] ?? "/"
 
-  const anonClient = createClient(supabaseUrl, supabaseAnonKey)
-  const { data: { user }, error: authError } = await anonClient.auth.getUser(jwt)
-  console.log("[alpaca-proxy] getUser result — user:", user?.id ?? "null", "| error:", authError?.message ?? "none")
-
-  if (authError || !user) {
-    return errJson(`Unauthorized: ${authError?.message ?? "no user"}`, 401)
+  // ── GET /debug — sin auth, confirma que el código corre ──────────────────
+  if (req.method === "GET" && subPath === "/debug") {
+    const authH = req.headers.get("Authorization") ?? ""
+    const jwt   = authH.startsWith("Bearer ") ? authH.slice(7) : ""
+    return jsonResponse({
+      fn_running:          true,
+      auth_header_present: !!authH,
+      auth_prefix:         authH.substring(0, 20),
+      jwt_segments:        jwt ? jwt.split(".").length : 0,
+      jwt_prefix:          jwt.substring(0, 20),
+      supabase_url_set:    !!supabaseUrl,
+      anon_key_set:        !!supabaseAnonKey,
+    })
   }
+
+  // ── JWT validation via GoTrue directo (sin SDK, sin ambigüedades) ─────────
+  const authHeader = req.headers.get("Authorization")
+  if (!authHeader?.startsWith("Bearer ")) {
+    return errJson("Missing or malformed Authorization header", 401)
+  }
+
+  const jwt = authHeader.slice(7)
+  console.log("[alpaca-proxy] JWT segments:", jwt.split(".").length, "prefix:", jwt.substring(0, 20))
+
+  // Llamada directa a GoTrue — más confiable que el SDK en contextos serverless
+  const goTrueRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      apikey:        supabaseAnonKey,
+    },
+  })
+  const goTrueData = await goTrueRes.json() as Record<string, unknown>
+  console.log("[alpaca-proxy] GoTrue status:", goTrueRes.status, "| id:", goTrueData["id"] ?? goTrueData["error"])
+
+  if (!goTrueRes.ok || !goTrueData["id"]) {
+    return errJson(`Auth failed (${goTrueRes.status}): ${goTrueData["error"] ?? goTrueData["message"] ?? "no user"}`, 401)
+  }
+
+  const userId = goTrueData["id"] as string
 
   // Cliente admin para operaciones de DB (bypass RLS)
   const supabase = createClient(supabaseUrl, supabaseSvcKey)
 
-  // ── Leer user_settings (necesitamos alpaca_mode y live_trading_enabled) ──
+  // ── Leer user_settings ────────────────────────────────────────────────────
   const { data: settings } = await supabase
     .from("user_settings")
     .select("alpaca_mode, live_trading_enabled, risk_per_trade_pct, max_position_size_pct")
-    .eq("id", user.id)
+    .eq("id", userId)
     .maybeSingle()
 
   const alpacaMode = settings?.alpaca_mode ?? "paper"
@@ -89,7 +111,6 @@ Deno.serve(async (req: Request) => {
     return errJson("Alpaca API keys not configured. Go to Settings to add them.", 503)
   }
 
-  // Base URL según modo
   const baseUrl = alpacaMode === "live" && liveEnabled
     ? "https://api.alpaca.markets"
     : "https://paper-api.alpaca.markets"
@@ -99,13 +120,6 @@ Deno.serve(async (req: Request) => {
     "APCA-API-SECRET-KEY": alpacaSecret,
     "Content-Type":        "application/json",
   }
-
-  // ── Routing ───────────────────────────────────────────────────────────────
-  const url = new URL(req.url)
-  // La función se monta en /alpaca-proxy, el "pathname real" viene en el path
-  // Supabase expone: /functions/v1/alpaca-proxy/<rest>
-  const pathParts = url.pathname.split("/alpaca-proxy")
-  const subPath   = pathParts[1] ?? "/"
 
   try {
     // ── GET /account ────────────────────────────────────────────────────────
@@ -121,7 +135,7 @@ Deno.serve(async (req: Request) => {
 
       // Guardar snapshot en equity_snapshots
       await supabase.from("equity_snapshots").insert({
-        user_id:      user.id,
+        user_id:      userId,
         broker:       "alpaca",
         equity,
         cash:         parseFloat(data.cash ?? 0),
@@ -172,10 +186,10 @@ Deno.serve(async (req: Request) => {
       }))
 
       // Upsert en Supabase (reemplazar posiciones actuales)
-      await supabase.from("positions").delete().eq("user_id", user.id).eq("broker", "alpaca")
+      await supabase.from("positions").delete().eq("user_id", userId).eq("broker", "alpaca")
       if (positions.length > 0) {
         await supabase.from("positions").insert(
-          positions.map(p => ({ ...p, user_id: user.id }))
+          positions.map(p => ({ ...p, user_id: userId }))
         )
       }
 
@@ -267,7 +281,7 @@ Deno.serve(async (req: Request) => {
       const { data: savedOrder, error: dbError } = await supabase
         .from("orders")
         .insert({
-          user_id:                  user.id,
+          user_id:                  userId,
           broker_order_id:          alpacaOrder.id,
           broker:                   "alpaca",
           symbol:                   symbol.toUpperCase(),
