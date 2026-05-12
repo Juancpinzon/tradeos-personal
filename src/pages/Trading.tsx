@@ -12,10 +12,10 @@ import OrderForm from '../components/trading/OrderForm'
 import ConfirmOrderModal from '../components/trading/ConfirmOrderModal'
 import OrderHistory from '../components/trading/OrderHistory'
 import { useOrders } from '../hooks/useOrders'
+import { usePortfolio } from '../hooks/usePortfolio'
 import { formatCurrency, formatPercent } from '../lib/formatters'
 import type { OrderDraft } from '../components/trading/OrderForm'
 import type { UserSettings } from '../types'
-import { MOCK_ACCOUNT, MOCK_POSITIONS } from '../lib/mockData'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config de watchlist (mock: se reemplazará con useMarketData en Fase 3)
@@ -115,13 +115,14 @@ export default function Trading() {
   const [lastConfirmed, setLastConfirmed] = useState<string | null>(null)
 
   const { orders, isLoading: ordersLoading, submitOrder } = useOrders()
+  const { account, positions } = usePortfolio()
 
   // Precio actual del símbolo seleccionado (desde watchlist mock)
   const selectedItem = MOCK_WATCHLIST.find(w => w.symbol === selectedSymbol) ?? null
   const currentPrice = selectedItem?.price ?? null
 
   // Posición actual del símbolo para mostrar portfolio_weight_at_order en modal
-  const currentPosition = MOCK_POSITIONS.find(p => p.symbol === selectedSymbol)
+  const currentPosition = positions.find(p => p.symbol === selectedSymbol)
   const portfolioWeightAtOrder = currentPosition?.portfolio_weight_pct ?? null
 
   // ── Handler: watchlist click ──────────────────────────────────────────────
@@ -228,7 +229,7 @@ export default function Trading() {
           <OrderForm
             initialSymbol={selectedSymbol}
             currentPrice={currentPrice}
-            totalEquity={MOCK_ACCOUNT.equity}
+            totalEquity={account?.equity ?? 0}
             userSettings={MOCK_SETTINGS}
             onReviewOrder={handleReviewOrder}
           />
@@ -291,7 +292,7 @@ export default function Trading() {
       {pendingDraft && (
         <ConfirmOrderModal
           draft={pendingDraft}
-          totalEquity={MOCK_ACCOUNT.equity}
+          totalEquity={account?.equity ?? 0}
           portfolioWeightAtOrder={portfolioWeightAtOrder}
           userSettings={MOCK_SETTINGS}
           isSubmitting={submitOrder.isPending}

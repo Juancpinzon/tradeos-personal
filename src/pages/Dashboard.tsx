@@ -175,15 +175,40 @@ function PortfolioSummary({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { account, positions, equitySnapshots, isLoading, isSyncing } = usePortfolio()
+  const { account, positions, equitySnapshots, isLoading, isSyncing, error } = usePortfolio()
   const [doctorOpen, setDoctorOpen] = useState(false)
   const navigate = useNavigate()
 
-  if (isLoading || !account) {
+  if (isLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
         <SyncSpinner />
         <span style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }}>Cargando portafolio...</span>
+      </div>
+    )
+  }
+
+  if (error || !account) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1rem', padding: '2rem' }}>
+        <div style={{
+          maxWidth: '480px',
+          width: '100%',
+          padding: '1.25rem 1.5rem',
+          borderRadius: '0.5rem',
+          border: '1px solid rgba(239,68,68,0.3)',
+          backgroundColor: 'rgba(239,68,68,0.05)',
+        }}>
+          <p style={{ fontSize: '0.875rem', color: '#ef4444', fontWeight: 600, marginBottom: '0.5rem' }}>
+            Error al cargar el portafolio
+          </p>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+            {error?.message ?? 'Sin datos de cuenta. Verificá que las API keys de Alpaca estén configuradas en Settings.'}
+          </p>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
+            Revisá: Supabase → Edge Functions → alpaca-proxy → Logs para ver el error exacto.
+          </p>
+        </div>
       </div>
     )
   }
