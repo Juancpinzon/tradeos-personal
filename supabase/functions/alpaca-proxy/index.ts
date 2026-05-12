@@ -73,8 +73,10 @@ Deno.serve(async (req: Request) => {
 
   let userId: string
   try {
-    const b64 = authHeader.slice(7).split(".")[1]!
-      .replace(/-/g, "+").replace(/_/g, "/")
+    const raw = authHeader.slice(7).split(".")[1]!
+    // base64url → padded base64 (atob requires padding)
+    const b64 = raw.replace(/-/g, "+").replace(/_/g, "/")
+      .padEnd(raw.length + (4 - raw.length % 4) % 4, "=")
     const payload = JSON.parse(atob(b64)) as Record<string, unknown>
     userId = payload["sub"] as string
     if (!userId) throw new Error("no sub")
