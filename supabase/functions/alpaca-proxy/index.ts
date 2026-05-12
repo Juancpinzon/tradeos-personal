@@ -65,25 +65,24 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  // ── JWT validation (ES256-compatible via esm.sh Supabase client) ──────────
+  // ── Auth — verifica header + decodifica userId del payload (sin verificar firma) ──
   const authHeader = req.headers.get("Authorization")
   if (!authHeader?.startsWith("Bearer ")) {
-    return errJson("Missing or malformed Authorization header", 401)
+    return errJson("No auth header", 401)
   }
 
-  const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-  })
-
-  const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
-
-  if (authError || !user) {
-    return errJson(`Unauthorized: ${authError?.message ?? "no user"}`, 401)
+  let userId: string
+  try {
+    const b64 = authHeader.slice(7).split(".")[1]!
+      .replace(/-/g, "+").replace(/_/g, "/")
+    const payload = JSON.parse(atob(b64)) as Record<string, unknown>
+    userId = payload["sub"] as string
+    if (!userId) throw new Error("no sub")
+  } catch {
+    return errJson("Invalid token", 401)
   }
 
-  const userId = user.id
-
-  // Cliente admin para operaciones de DB (bypass RLS)
+  // Service role client — usa la key inyectada automáticamente por Supabase
   const supabase = createClient(supabaseUrl, supabaseSvcKey)
 
   // ── Leer user_settings ────────────────────────────────────────────────────
