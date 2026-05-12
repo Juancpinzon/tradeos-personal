@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from "jsr:@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const FMP_BASE = "https://financialmodelingprep.com/api/v3"
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000  // 24 horas
@@ -38,19 +38,23 @@ Deno.serve(async (req: Request) => {
   const authHeader = req.headers.get("Authorization")
   if (!authHeader) return err("Missing Authorization header", 401)
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!
-  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  const fmpKey      = Deno.env.get("FMP_API_KEY")
+  const supabaseUrl  = Deno.env.get("SUPABASE_URL")!
+  const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!
+  const supabaseSvc  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  const fmpKey       = Deno.env.get("FMP_API_KEY")
 
   if (!fmpKey) return err("FMP_API_KEY not configured", 500)
 
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+  // Auth client — ANON_KEY + global.headers (ES256-compatible)
+  const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
     global: { headers: { Authorization: authHeader } },
   })
 
-  // Verificar JWT
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
   if (authError || !user) return err("Unauthorized", 401)
+
+  // DB client — SERVICE_ROLE_KEY for cache reads/writes (bypass RLS)
+  const supabase = createClient(supabaseUrl, supabaseSvc)
 
   // ── Routing ─────────────────────────────────────────────────────────────────
   const url      = new URL(req.url)

@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from "jsr:@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -65,30 +65,23 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  // ── JWT validation via GoTrue directo (sin SDK, sin ambigüedades) ─────────
+  // ── JWT validation (ES256-compatible via esm.sh Supabase client) ──────────
   const authHeader = req.headers.get("Authorization")
   if (!authHeader?.startsWith("Bearer ")) {
     return errJson("Missing or malformed Authorization header", 401)
   }
 
-  const jwt = authHeader.slice(7)
-  console.log("[alpaca-proxy] JWT segments:", jwt.split(".").length, "prefix:", jwt.substring(0, 20))
-
-  // Llamada directa a GoTrue — más confiable que el SDK en contextos serverless
-  const goTrueRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-      apikey:        supabaseAnonKey,
-    },
+  const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
   })
-  const goTrueData = await goTrueRes.json() as Record<string, unknown>
-  console.log("[alpaca-proxy] GoTrue status:", goTrueRes.status, "| id:", goTrueData["id"] ?? goTrueData["error"])
 
-  if (!goTrueRes.ok || !goTrueData["id"]) {
-    return errJson(`Auth failed (${goTrueRes.status}): ${goTrueData["error"] ?? goTrueData["message"] ?? "no user"}`, 401)
+  const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
+
+  if (authError || !user) {
+    return errJson(`Unauthorized: ${authError?.message ?? "no user"}`, 401)
   }
 
-  const userId = goTrueData["id"] as string
+  const userId = user.id
 
   // Cliente admin para operaciones de DB (bypass RLS)
   const supabase = createClient(supabaseUrl, supabaseSvcKey)

@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from "jsr:@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import Anthropic from "npm:@anthropic-ai/sdk"
 
 const ALPACA_BASE  = "https://data.alpaca.markets"
@@ -36,19 +36,24 @@ Deno.serve(async (req: Request) => {
   if (!authHeader) return errJson("Missing Authorization header", 401)
 
   const supabaseUrl  = Deno.env.get("SUPABASE_URL")!
-  const supabaseKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!
+  const supabaseSvc  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY")
   const alpacaKey    = Deno.env.get("ALPACA_API_KEY")
   const alpacaSecret = Deno.env.get("ALPACA_SECRET_KEY")
 
   if (!anthropicKey) return errJson("ANTHROPIC_API_KEY not configured", 500)
 
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+  // Auth client — ANON_KEY + global.headers (ES256-compatible)
+  const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
     global: { headers: { Authorization: authHeader } },
   })
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
   if (authError || !user) return errJson("Unauthorized", 401)
+
+  // DB client — SERVICE_ROLE_KEY for all database operations (bypass RLS)
+  const supabase = createClient(supabaseUrl, supabaseSvc)
 
   // ── Parse body ──────────────────────────────────────────────────────────────
   let body: { symbol?: string; query?: string }
