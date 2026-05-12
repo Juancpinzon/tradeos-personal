@@ -66,26 +66,25 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Auth — verifica header + decodifica userId del payload (sin verificar firma) ──
-  // ── Auth — usar Supabase client con token del usuario ──
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return errJson("No auth header", 401);
   }
 
-  const userToken = authHeader.slice(7);
-  const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${userToken}` } },
-  });
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabaseUser.auth.getUser();
-  if (authError || !user) {
-    console.error("Auth error:", authError?.message);
-    return errJson("Unauthorized: " + (authError?.message ?? "no user"), 401);
+  let userId: string;
+  try {
+    const raw = authHeader.slice(7).split(".")[1]!;
+    // base64url → padded base64 (atob requiere padding)
+    const b64 = raw
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(raw.length + ((4 - (raw.length % 4)) % 4), "=");
+    const payload = JSON.parse(atob(b64)) as Record<string, unknown>;
+    userId = payload["sub"] as string;
+    if (!userId) throw new Error("no sub");
+  } catch {
+    return errJson("Invalid token", 401);
   }
-  const userId = user.id;
 
   // Service role client — usa la key inyectada automáticamente por Supabase
   const supabase = createClient(supabaseUrl, supabaseSvcKey);
