@@ -26,12 +26,10 @@ export interface UsePortfolioReturn {
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 async function getToken(): Promise<string> {
-  // getUser() valida el token con el servidor y dispara auto-refresh si expiró
-  const { error: userError } = await supabase.auth.getUser()
-  if (userError) throw new Error('No hay sesión activa. Iniciá sesión nuevamente.')
-
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.access_token) throw new Error('No hay sesión activa. Iniciá sesión nuevamente.')
+  const { data: { session }, error } = await supabase.auth.getSession()
+  if (error || !session?.access_token) {
+    throw new Error('No hay sesión activa. Iniciá sesión nuevamente.')
+  }
   return session.access_token
 }
 

@@ -49,17 +49,17 @@ Deno.serve(async (req: Request) => {
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!
   const supabaseSvcKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
-  // Validar JWT del usuario con el ANON key (patrón oficial Supabase)
-  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-  })
-
-  const { data: { user }, error: authError } = await userClient.auth.getUser()
+  // Extraer el token y pasarlo explícitamente a getUser(token)
+  // Pasar el token directamente evita el problema de sesión vacía
+  // en clientes serverless recién creados.
+  const jwt = authHeader.replace("Bearer ", "")
+  const anonClient = createClient(supabaseUrl, supabaseAnonKey)
+  const { data: { user }, error: authError } = await anonClient.auth.getUser(jwt)
   if (authError || !user) {
     return errJson(`Unauthorized: ${authError?.message ?? "no user"}`, 401)
   }
 
-  // Cliente admin para operaciones de DB (bypass RLS, sin JWT del usuario)
+  // Cliente admin para operaciones de DB (bypass RLS)
   const supabase = createClient(supabaseUrl, supabaseSvcKey)
 
   // ── Leer user_settings (necesitamos alpaca_mode y live_trading_enabled) ──
