@@ -1,16 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // src/hooks/usePortfolio.ts — Hook principal de portafolio
 //
-// MODO DEMO: retorna datos de mockData.ts directamente.
-// TODO: reemplazar mock por llamada a alpaca-proxy cuando las keys estén disponibles.
-//
-// La estructura del retorno es idéntica a la que usaría con datos reales,
-// permitiendo un reemplazo limpio sin cambiar los componentes que consumen este hook.
+// Llama a la Edge Function alpaca-proxy para obtener datos reales de Alpaca paper.
+// React Query cachea 30s y refetch en background cada 60s.
+// El snapshot de equity se guarda en DB dentro de la Edge Function /account.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AccountSummary, Position, EquitySnapshot } from '../types'
-import { MOCK_ACCOUNT, MOCK_POSITIONS, MOCK_EQUITY_SNAPSHOTS } from '../lib/mockData'
+import { supabase } from '../lib/supabase'
 
 export interface UsePortfolioReturn {
   account: AccountSummary | null
@@ -21,56 +20,89 @@ export interface UsePortfolioReturn {
   refetch: () => void
 }
 
+// ─── fetchers ────────────────────────────────────────────────────────────────
+
+async function fetchAccount(): Promise<AccountSummary> {
+  const { data, error } = await supabase.functions.invoke<AccountSummary>(
+    'alpaca-proxy/account',
+    { method: 'GET' },
+  )
+  if (error) throw error
+  if (!data) throw new Error('No account data returned')
+  return { ...data, broker: 'alpaca' }
+}
+
+async function fetchPositions(): Promise<Position[]> {
+  const { data, error } = await supabase.functions.invoke<Position[]>(
+    'alpaca-proxy/positions',
+    { method: 'GET' },
+  )
+  if (error) throw error
+  return data ?? []
+}
+
+async function fetchEquitySnapshots(): Promise<EquitySnapshot[]> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data, error } = await supabase
+    .from('equity_snapshots')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('broker', 'alpaca')
+    .order('snapshot_at', { ascending: true })
+    .limit(90)
+
+  if (error) throw error
+  return (data ?? []) as EquitySnapshot[]
+}
+
+// ─── hook ─────────────────────────────────────────────────────────────────────
+
 export function usePortfolio(): UsePortfolioReturn {
-  const [isSyncing, setIsSyncing] = useState(true)
-  const [isLoading, setIsLoading] = useState(true)
-  const [account, setAccount] = useState<AccountSummary | null>(null)
-  const [positions, setPositions] = useState<Position[]>([])
-  const [equitySnapshots, setEquitySnapshots] = useState<EquitySnapshot[]>([])
+  const queryClient = useQueryClient()
 
-  const loadMockData = useCallback(() => {
-    // TODO: reemplazar mock por llamada a alpaca-proxy cuando las keys estén disponibles.
-    // Ejemplo futuro:
-    //   const { data } = await supabase.functions.invoke('alpaca-proxy', {
-    //     body: { endpoint: '/account' }
-    //   })
+  const accountQuery = useQuery({
+    queryKey: ['portfolio', 'account'],
+    queryFn: fetchAccount,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
 
-    // Calcular portfolio_weight_pct para cada posición usando el equity total
-    const equity = MOCK_ACCOUNT.equity
-    const positionsWithWeight: Position[] = MOCK_POSITIONS.map((pos) => ({
-      ...pos,
-      portfolio_weight_pct: (pos.market_value / equity) * 100,
-    }))
+  const positionsQuery = useQuery({
+    queryKey: ['portfolio', 'positions'],
+    queryFn: fetchPositions,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
 
-    setAccount(MOCK_ACCOUNT)
-    setPositions(positionsWithWeight)
-    setEquitySnapshots(MOCK_EQUITY_SNAPSHOTS)
-    setIsLoading(false)
-  }, [])
-
-  useEffect(() => {
-    // Simular carga inicial
-    loadMockData()
-
-    // Simular isSyncing: true por 1.5s al montar, luego false
-    const syncTimer = setTimeout(() => {
-      setIsSyncing(false)
-    }, 1500)
-
-    return () => clearTimeout(syncTimer)
-  }, [loadMockData])
+  const snapshotsQuery = useQuery({
+    queryKey: ['portfolio', 'snapshots'],
+    queryFn: fetchEquitySnapshots,
+    staleTime: 60_000,
+    enabled: accountQuery.isSuccess,
+  })
 
   const refetch = useCallback(() => {
-    setIsSyncing(true)
-    loadMockData()
-    // Simular sync de 1.5s
-    setTimeout(() => setIsSyncing(false), 1500)
-  }, [loadMockData])
+    void queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+  }, [queryClient])
+
+  const isLoading = accountQuery.isLoading || positionsQuery.isLoading
+  const isSyncing = (accountQuery.isFetching || positionsQuery.isFetching) && !isLoading
+
+  // Recalcular portfolio_weight_pct usando el equity total de la cuenta (incluye cash)
+  const equity = accountQuery.data?.equity ?? 0
+  const positions: Position[] = (positionsQuery.data ?? []).map(pos => ({
+    ...pos,
+    portfolio_weight_pct: equity > 0
+      ? (pos.market_value / equity) * 100
+      : pos.portfolio_weight_pct,
+  }))
 
   return {
-    account,
+    account: accountQuery.data ?? null,
     positions,
-    equitySnapshots,
+    equitySnapshots: snapshotsQuery.data ?? [],
     isLoading,
     isSyncing,
     refetch,

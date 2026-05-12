@@ -101,21 +101,26 @@ Deno.serve(async (req: Request) => {
         return errJson(data?.message ?? "Alpaca error", res.status)
       }
 
+      const equity     = parseFloat(data.equity ?? data.portfolio_value ?? 0)
+
       // Guardar snapshot en equity_snapshots
       await supabase.from("equity_snapshots").insert({
-        user_id:     user.id,
-        broker:      "alpaca",
-        equity:      parseFloat(data.equity ?? data.portfolio_value ?? 0),
-        cash:        parseFloat(data.cash ?? 0),
-        buying_power: parseFloat(data.buying_power ?? 0),
-      })
-
-      return jsonResponse({
-        equity:       parseFloat(data.equity ?? data.portfolio_value ?? 0),
+        user_id:      user.id,
+        broker:       "alpaca",
+        equity,
         cash:         parseFloat(data.cash ?? 0),
         buying_power: parseFloat(data.buying_power ?? 0),
-        pnl_today:    parseFloat(data.equity ?? 0) - parseFloat(data.last_equity ?? data.equity ?? 0),
-        mode:         alpacaMode,
+      })
+      const lastEquity = parseFloat(data.last_equity ?? data.equity ?? 0)
+      const pnlToday   = equity - lastEquity
+
+      return jsonResponse({
+        equity,
+        cash:          parseFloat(data.cash ?? 0),
+        buying_power:  parseFloat(data.buying_power ?? 0),
+        pnl_today:     pnlToday,
+        pnl_today_pct: lastEquity > 0 ? (pnlToday / lastEquity) * 100 : 0,
+        mode:          alpacaMode,
       })
     }
 
