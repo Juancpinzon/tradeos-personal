@@ -45,15 +45,22 @@ Deno.serve(async (req: Request) => {
   const authHeader = req.headers.get("Authorization")
   if (!authHeader) return errJson("Missing Authorization header", 401)
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!
-  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  const supabaseUrl     = Deno.env.get("SUPABASE_URL")!
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!
+  const supabaseSvcKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+  // Validar JWT del usuario con el ANON key (patrón oficial Supabase)
+  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
   })
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return errJson("Unauthorized", 401)
+  const { data: { user }, error: authError } = await userClient.auth.getUser()
+  if (authError || !user) {
+    return errJson(`Unauthorized: ${authError?.message ?? "no user"}`, 401)
+  }
+
+  // Cliente admin para operaciones de DB (bypass RLS, sin JWT del usuario)
+  const supabase = createClient(supabaseUrl, supabaseSvcKey)
 
   // ── Leer user_settings (necesitamos alpaca_mode y live_trading_enabled) ──
   const { data: settings } = await supabase
