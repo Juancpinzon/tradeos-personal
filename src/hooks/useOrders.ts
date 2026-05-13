@@ -2,6 +2,7 @@
 // Órdenes: lista desde Supabase (Order[]), submit/cancel via alpaca-proxy Edge Function.
 // Nunca llama a Alpaca directamente desde el cliente.
 
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { Order, OrderPayload } from "@/types";
@@ -9,7 +10,9 @@ import type { Order, OrderPayload } from "@/types";
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
 const PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/alpaca-proxy`;
-const STALE_TIME = 15_000;
+
+const NON_TERMINAL = ["pending", "accepted", "partially_filled"] as const;
+type NonTerminal = (typeof NON_TERMINAL)[number];
 
 // ─── Headers con JWT del usuario para Edge Functions ─────────────────────────
 
@@ -23,11 +26,35 @@ async function buildHeaders(): Promise<HeadersInit> {
   };
 }
 
-// ─── Fetcher: historial desde Supabase (Order[]) ──────────────────────────────
+// ─── Sync: llama al proxy por cada orden no-terminal para actualizar la DB ───
+// GET /orders/:id en el proxy ya sincroniza status + fill data a la DB.
+
+async function syncNonTerminalOrders(): Promise<void> {
+  const { data: openOrders } = await supabase
+    .from("orders")
+    .select("broker_order_id")
+    .in("status", [...NON_TERMINAL]);
+
+  if (!openOrders || openOrders.length === 0) return;
+
+  const headers = await buildHeaders();
+  await Promise.all(
+    openOrders
+      .filter(o => o.broker_order_id)
+      .map(o =>
+        fetch(`${PROXY_URL}/orders/${o.broker_order_id as string}`, { headers })
+          .catch(() => null),
+      ),
+  );
+}
+
+// ─── Fetcher: sincroniza con Alpaca, luego lee DB actualizada ─────────────────
 
 async function fetchOrders(
   status: "all" | "open" | "closed" = "all",
 ): Promise<Order[]> {
+  await syncNonTerminalOrders();
+
   let query = supabase
     .from("orders")
     .select("*")
@@ -35,7 +62,7 @@ async function fetchOrders(
     .limit(100);
 
   if (status === "open") {
-    query = query.in("status", ["pending", "accepted", "partially_filled"]);
+    query = query.in("status", [...NON_TERMINAL]);
   } else if (status === "closed") {
     query = query.in("status", ["filled", "cancelled", "rejected"]);
   }
@@ -91,13 +118,41 @@ async function cancelOrderByBrokerOrderId(brokerOrderId: string): Promise<void> 
 
 export function useOrders(status: "all" | "open" | "closed" = "all") {
   const queryClient = useQueryClient();
+  const prevStatusesRef = useRef<Map<string, Order["status"]>>(new Map());
 
   const ordersQuery = useQuery({
     queryKey: ["orders", status],
     queryFn: () => fetchOrders(status),
-    staleTime: STALE_TIME,
-    refetchInterval: status === "open" ? 5_000 : false,
+    staleTime: 10_000,
+    // Poll every 3s while non-terminal orders exist; stop otherwise.
+    refetchInterval: (query) => {
+      const data = (query.state.data ?? []) as Order[];
+      const hasOpen = data.some(o =>
+        (NON_TERMINAL as readonly string[]).includes(o.status),
+      );
+      return hasOpen ? 3_000 : false;
+    },
   });
+
+  // Invalidate portfolio when any order transitions to filled.
+  useEffect(() => {
+    const current = ordersQuery.data ?? [];
+    let newlyFilled = false;
+
+    for (const o of current) {
+      const prev = prevStatusesRef.current.get(o.id);
+      if (prev !== undefined && prev !== "filled" && o.status === "filled") {
+        newlyFilled = true;
+        break;
+      }
+    }
+
+    prevStatusesRef.current = new Map(current.map(o => [o.id, o.status]));
+
+    if (newlyFilled) {
+      queryClient.invalidateQueries({ queryKey: ["portfolio"] });
+    }
+  }, [ordersQuery.data, queryClient]);
 
   const submitMutation = useMutation({
     mutationFn: submitOrderToProxy,
@@ -130,3 +185,6 @@ export function useOrders(status: "all" | "open" | "closed" = "all") {
     refetch: ordersQuery.refetch,
   };
 }
+
+// Re-export the NonTerminal type so OrderHistory can use it.
+export type { NonTerminal };

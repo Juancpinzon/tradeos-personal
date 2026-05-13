@@ -4,16 +4,20 @@
 // filled=verde, cancelled=gris, rejected=rojo, pending/accepted=amarillo
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Clock, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { Clock, CheckCircle, XCircle, AlertCircle, Loader2, X } from 'lucide-react'
 import { formatCurrency, formatQty, formatDate } from '../../lib/formatters'
 import type { Order } from '../../types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+const CANCELLABLE: ReadonlySet<Order['status']> = new Set(['accepted', 'pending'])
+
 interface OrderHistoryProps {
   orders: Order[]
   isLoading: boolean
   limit?: number
+  onCancelOrder?: (brokerOrderId: string) => Promise<void>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,8 +66,30 @@ const STATUS_CONFIG: Record<
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function OrderHistory({ orders, isLoading, limit = 20 }: OrderHistoryProps) {
+export default function OrderHistory({
+  orders,
+  isLoading,
+  limit = 20,
+  onCancelOrder,
+}: OrderHistoryProps) {
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set())
   const displayOrders = orders.slice(0, limit)
+
+  async function handleCancel(order: Order) {
+    if (!onCancelOrder || !order.broker_order_id) return
+    setCancellingIds(prev => new Set(prev).add(order.id))
+    try {
+      await onCancelOrder(order.broker_order_id)
+    } finally {
+      setCancellingIds(prev => {
+        const next = new Set(prev)
+        next.delete(order.id)
+        return next
+      })
+    }
+  }
+
+  const showActionsCol = !!onCancelOrder
 
   return (
     <div className="order-history">
@@ -101,6 +127,7 @@ export default function OrderHistory({ orders, isLoading, limit = 20 }: OrderHis
                 <th className="text-right">PRECIO</th>
                 <th className="text-right">STATUS</th>
                 <th className="text-right">FECHA</th>
+                {showActionsCol && <th />}
               </tr>
             </thead>
             <tbody>
@@ -108,6 +135,8 @@ export default function OrderHistory({ orders, isLoading, limit = 20 }: OrderHis
                 const statusCfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending
                 const price = order.filled_avg_price ?? order.limit_price ?? null
                 const isBuy = order.side === 'buy'
+                const isCancellable = showActionsCol && CANCELLABLE.has(order.status)
+                const isCancelling = cancellingIds.has(order.id)
 
                 return (
                   <tr key={order.id} className="order-row">
@@ -162,6 +191,23 @@ export default function OrderHistory({ orders, isLoading, limit = 20 }: OrderHis
                     <td className="text-right order-row__date">
                       {formatDate(order.submitted_at)}
                     </td>
+
+                    {showActionsCol && (
+                      <td className="text-right order-row__actions">
+                        {isCancellable && (
+                          <button
+                            className="cancel-btn"
+                            onClick={() => handleCancel(order)}
+                            disabled={isCancelling}
+                            title="Cancelar orden"
+                          >
+                            {isCancelling
+                              ? <Loader2 size={11} className="spin-icon" />
+                              : <X size={11} />}
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 )
               })}
@@ -275,6 +321,10 @@ export default function OrderHistory({ orders, isLoading, limit = 20 }: OrderHis
           color: var(--text-muted);
           white-space: nowrap;
         }
+        .order-row__actions {
+          width: 32px;
+          padding-right: 8px !important;
+        }
         .order-side-badge {
           display: inline-flex;
           align-items: center;
@@ -298,6 +348,28 @@ export default function OrderHistory({ orders, isLoading, limit = 20 }: OrderHis
           border-radius: 4px;
           border: 1px solid;
           white-space: nowrap;
+        }
+        .cancel-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          border-radius: 4px;
+          border: 1px solid rgba(239, 68, 68, 0.3);
+          background: rgba(239, 68, 68, 0.06);
+          color: var(--color-loss);
+          cursor: pointer;
+          transition: background 120ms ease, border-color 120ms ease;
+          padding: 0;
+        }
+        .cancel-btn:hover:not(:disabled) {
+          background: rgba(239, 68, 68, 0.15);
+          border-color: rgba(239, 68, 68, 0.5);
+        }
+        .cancel-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
         .spin-icon {
           animation: spin 1s linear infinite;

@@ -105,7 +105,7 @@ export default function Trading() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [lastConfirmed, setLastConfirmed] = useState<string | null>(null)
 
-  const { orders, isLoading: ordersLoading, submitOrder, isSubmitting } = useOrders()
+  const { orders, isLoading: ordersLoading, submitOrder, isSubmitting, cancelOrder } = useOrders()
   const { account, positions } = usePortfolio()
 
   // Precio actual del símbolo seleccionado (desde watchlist mock)
@@ -284,6 +284,7 @@ export default function Trading() {
             orders={orders}
             isLoading={ordersLoading}
             limit={15}
+            onCancelOrder={cancelOrder}
           />
         </div>
       </div>
