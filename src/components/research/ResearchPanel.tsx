@@ -353,46 +353,6 @@ export function ResearchPanel() {
             </>
           )}
         </button>
-
-        {/* Botón Nuevo Análisis */}
-        {hasResult && !isLoading && !isStreaming && (
-          <button
-            type="button"
-            onClick={() => {
-              reset()
-              setSymbolInput('')
-              setQueryInput('')
-              setTimeout(() => symbolRef.current?.focus(), 0)
-            }}
-            style={{
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-default)',
-              borderRadius: '6px',
-              padding: '9px 18px',
-              fontSize: '13px',
-              fontWeight: 600,
-              fontFamily: 'Syne, system-ui, sans-serif',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'all 150ms',
-              alignSelf: 'stretch',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-primary)'
-              (e.currentTarget as HTMLElement).style.color = 'var(--color-primary)'
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'
-              (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'
-            }}
-          >
-            <RotateCcw size={14} />
-            Nuevo análisis
-          </button>
-        )}
       </form>
 
       {/* ── Error ─────────────────────────────────────────────────────────── */}
@@ -438,8 +398,96 @@ export function ResearchPanel() {
                 borderRadius: '8px',
                 padding: '20px 24px',
                 minHeight: '200px',
+                position: 'relative',
               }}
             >
+              {/* Toolbar de acciones (Copiar / Reset) */}
+              {hasResult && !isLoading && !isStreaming && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '12px',
+                    right: '12px',
+                    display: 'flex',
+                    gap: '8px',
+                    zIndex: 10,
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(streamingText)
+                      alert('Análisis copiado al portapapeles')
+                    }}
+                    title="Copiar análisis"
+                    style={{
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      fontSize: '11px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <span>📋</span> Copiar
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const element = document.createElement("a");
+                      const file = new Blob([streamingText], {type: 'text/plain'});
+                      element.href = URL.createObjectURL(file);
+                      element.download = `research_${currentSymbol || 'analysis'}.txt`;
+                      document.body.appendChild(element);
+                      element.click();
+                      document.body.removeChild(element);
+                    }}
+                    title="Descargar análisis"
+                    style={{
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      fontSize: '11px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <span>📥</span> Descargar
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      reset()
+                      setSymbolInput('')
+                      setQueryInput('')
+                      setTimeout(() => symbolRef.current?.focus(), 0)
+                    }}
+                    title="Nuevo análisis"
+                    style={{
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      fontSize: '11px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <RotateCcw size={12} /> Nuevo
+                  </button>
+                </div>
+              )}
+
               {isLoading && !hasResult ? (
                 <SkeletonLoader />
               ) : (
