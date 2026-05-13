@@ -47,10 +47,13 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Auth (manual JWT decode) ──────────────────────────────────────────────
-  const authHeader =
-    req.headers.get("Authorization") ??
-    ("Bearer " + (req.headers.get("x-user-token") ?? ""));
-  if (!authHeader || authHeader === "Bearer ") return errJson("Missing authorization header", 401);
+  const rawToken =
+    req.headers.get("x-user-token") ??
+    url.searchParams.get("token") ??
+    req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ??
+    "";
+  const authHeader = rawToken ? `Bearer ${rawToken}` : "";
+  if (!authHeader) return errJson("Missing authorization header", 401);
 
   let userId: string;
   try {
