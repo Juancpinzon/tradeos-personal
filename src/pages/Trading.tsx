@@ -29,25 +29,16 @@ interface WatchItem {
   earningsDays?: number | null
 }
 
-const MOCK_WATCHLIST: WatchItem[] = [
-  { symbol: 'AAPL',  price: 182.50,  change1d: +1.23,  inPortfolio: true,  earningsDays: 12 },
-  { symbol: 'MSFT',  price: 415.30,  change1d: +0.87,  inPortfolio: true,  earningsDays: null },
-  { symbol: 'NVDA',  price: 950.80,  change1d: +3.14,  inPortfolio: true,  earningsDays: null },
-  { symbol: 'TSLA',  price: 178.40,  change1d: -2.05,  inPortfolio: true,  earningsDays: null },
-  { symbol: 'SPY',   price: 528.60,  change1d: +0.45,  inPortfolio: true,  earningsDays: null },
-  { symbol: 'META',  price: 489.20,  change1d: +1.67,  inPortfolio: false, earningsDays: 5 },
-  { symbol: 'AMZN',  price: 186.90,  change1d: -0.33,  inPortfolio: false, earningsDays: null },
-  { symbol: 'GOOG',  price: 174.10,  change1d: +0.92,  inPortfolio: false, earningsDays: null },
-]
+const MOCK_WATCHLIST: WatchItem[] = []
 
 // Settings por defecto (se reemplazará con hook useSettings en Fase 6)
-const MOCK_SETTINGS: UserSettings = {
-  id:                  'mock-user',
+const DEFAULT_SETTINGS: UserSettings = {
+  id:                  'loading',
   alpaca_mode:         'paper',
   live_trading_enabled: false,
   default_broker:      'alpaca',
-  risk_per_trade_pct:   2,
-  max_position_size_pct: 15,
+  risk_per_trade_pct:   1,
+  max_position_size_pct: 10,
   created_at:          new Date().toISOString(),
   updated_at:          new Date().toISOString(),
 }
@@ -230,7 +221,7 @@ export default function Trading() {
             initialSymbol={selectedSymbol}
             currentPrice={currentPrice}
             totalEquity={account?.equity ?? 0}
-            userSettings={MOCK_SETTINGS}
+            userSettings={DEFAULT_SETTINGS}
             onReviewOrder={handleReviewOrder}
           />
 
@@ -294,7 +285,7 @@ export default function Trading() {
           draft={pendingDraft}
           totalEquity={account?.equity ?? 0}
           portfolioWeightAtOrder={portfolioWeightAtOrder}
-          userSettings={MOCK_SETTINGS}
+          userSettings={DEFAULT_SETTINGS}
           isSubmitting={submitOrder.isPending}
           onConfirm={handleConfirmOrder}
           onCancel={handleCancelModal}

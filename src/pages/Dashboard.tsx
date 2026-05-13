@@ -9,7 +9,7 @@ import { usePortfolio } from '../hooks/usePortfolio'
 import EquityChart from '../components/portfolio/EquityChart'
 import PortfolioDoctor from '../components/portfolio/PortfolioDoctor'
 import PositionCard from '../components/portfolio/PositionCard'
-import EarningsCalendar, { MOCK_EARNINGS_EVENTS } from '../components/earnings/EarningsCalendar'
+import EarningsCalendar from '../components/earnings/EarningsCalendar'
 import {
   formatCurrency,
   formatPercent,
@@ -288,7 +288,7 @@ export default function Dashboard() {
               <PositionCard
                 key={pos.id}
                 position={pos}
-                earningsEvents={MOCK_EARNINGS_EVENTS}
+                earningsEvents={[]}
                 compact
               />
             ))
@@ -382,7 +382,7 @@ export default function Dashboard() {
               </button>
             </div>
             <EarningsCalendar
-              events={MOCK_EARNINGS_EVENTS}
+              events={[]}
               compact
               maxEvents={3}
               showHeader={false}

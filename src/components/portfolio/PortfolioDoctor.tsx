@@ -7,64 +7,11 @@
 import { useNavigate } from 'react-router-dom'
 import { formatDate } from '../../lib/formatters'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Mock data
-// ─────────────────────────────────────────────────────────────────────────────
-
-type RiskLevel = 'Conservative' | 'Moderate' | 'Aggressive'
-
-interface MockSection {
-  icon: string
-  title: string
-  content: string
-  recommendations?: { symbol: string; action: string }[]
-}
-
-const MOCK_ANALYSIS: { risk: RiskLevel; sections: MockSection[]; analysisDate: string } = {
+// ──────────────────�const MOCK_ANALYSIS: { risk: RiskLevel; sections: MockSection[]; analysisDate: string } = {
   risk: 'Moderate',
   analysisDate: new Date().toISOString(),
-  sections: [
-    {
-      icon: '🎯',
-      title: 'NIVEL DE RIESGO',
-      content: 'Moderate — El portafolio tiene un balance razonable entre crecimiento y estabilidad. La presencia de NVDA (+18% de peso) y BTC (+12%) introduce volatilidad por encima de lo neutral, compensada parcialmente por SPY como ancla defensiva.',
-    },
-    {
-      icon: '📊',
-      title: 'CONCENTRACIÓN',
-      content: 'Tecnología representa el 68% del portafolio. NVDA sola ocupa el 18.4%, superando el límite recomendado del 15%. Los sectores de salud y consumo básico están ausentes, limitando la diversificación sectorial. Cripto (BTC) agrega descorrelación pero también volatilidad.',
-    },
-    {
-      icon: '🔗',
-      title: 'CORRELACIÓN',
-      content: 'AAPL, MSFT y NVDA tienen correlación alta (β > 0.85 entre sí). En caídas de mercado tech, las tres posiciones caerán en conjunto. BTC actúa como cobertura parcial en escenarios de inflación pero amplifica pérdidas en risk-off. TSLA y NVDA comparten exposición a chips de IA.',
-      recommendations: [
-        { symbol: 'SPY', action: 'Ver en Trading' },
-        { symbol: 'GLD', action: 'Ver en Trading' },
-      ],
-    },
-    {
-      icon: '⚖️',
-      title: 'POSICIONES DÉBILES',
-      content: 'TSLA: Revenue growth desaceleró a +2.1% YoY vs +50% en 2022. P/E de 68x con márgenes comprimidos al 6.2%. Guidanace Q2 por debajo del consenso. La posición representa 9.1% del portafolio con perfil riesgo/retorno desfavorable en el corto plazo.\n\nMSFT: La posición está en profit pero el peso del 14.2% crea sobre-exposición a la tesis de IA cloud que ya está descontada en el precio. Reducción parcial tomaría profit y rebalancearía el portafolio.',
-      recommendations: [
-        { symbol: 'TSLA', action: 'Ver en Trading' },
-        { symbol: 'MSFT', action: 'Ver en Trading' },
-      ],
-    },
-    {
-      icon: '✂️',
-      title: 'QUÉ RECORTARÍA',
-      content: 'TSLA con target de salida en $185 (actual: $172). Si no recupera $185 en las próximas 2 semanas previas al earnings, recortar el 50% de la posición. El catalizador negativo sería un EPS miss en el Q2 report del 23 de julio.\n\nNVDA: Reducir de 18.4% a 12-13% tomando profit en el rango $950-$980. Esto libera ~$1,800 de capital para rebalancear.',
-      recommendations: [
-        { symbol: 'TSLA', action: 'Ver en Trading' },
-        { symbol: 'NVDA', action: 'Ver en Trading' },
-      ],
-    },
-    {
-      icon: '📈',
-      title: 'QUÉ AMPLIARÍA',
-      content: 'AAPL: Earnings en 2 días con EPS estimate de $1.62 (+8% YoY). Si supera el consenso, el setup técnico (RSI 52, soporte en $175) favorece continuación. Ampliar hasta 15% del portafolio post-earnings si el resultado es positivo. Revenue de Services sigue creciendo al 14% YoY — el segmento más rentable.',
+  sections: [],
+}al 14% YoY — el segmento más rentable.',
       recommendations: [
         { symbol: 'AAPL', action: 'Ver en Trading' },
       ],

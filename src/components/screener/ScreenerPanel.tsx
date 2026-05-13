@@ -13,37 +13,7 @@ import ScreenerResultsTable from './ScreenerResultsTable'
 // Mock data
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MOCK_PRESETS: ScreenerPreset[] = [
-  {
-    id: 'preset-1',
-    user_id: 'mock',
-    name: 'Momentum Growth',
-    criteria: {
-      market_cap_min: 2_000_000_000,
-      revenue_growth_min_pct: 20,
-      volume_avg_min: 200_000,
-      ath_distance_max_pct: -20,
-      eps_next_positive: true,
-      asset_class: 'equity',
-    },
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'preset-2',
-    user_id: 'mock',
-    name: 'Breakout Técnico',
-    criteria: {
-      market_cap_min: 1_000_000_000,
-      price_min: 10,
-      ath_distance_max_pct: -10,
-      rsi_weekly_min: 50,
-      rsi_weekly_max: 70,
-      eps_next_positive: true,
-      asset_class: 'equity',
-    },
-    created_at: new Date().toISOString(),
-  },
-]
+const MOCK_PRESETS: ScreenerPreset[] = []
 
 const addDays = (n: number): string => {
   const d = new Date()
@@ -51,88 +21,8 @@ const addDays = (n: number): string => {
   return d.toISOString().split('T')[0] as string
 }
 
-const MOCK_RESULTS: ScreenerResultItem[] = [
-  {
-    symbol: 'NVDA',
-    name: 'NVIDIA Corporation',
-    price: 924.37,
-    market_cap: 2_280_000_000_000,
-    revenue_growth_pct: 122.4,
-    ath_distance_pct: -5.2,
-    rsi_weekly: 65,
-    eps_next_estimate: 5.89,
-    volume_avg: 45_000_000,
-    next_earnings_date: addDays(5),
-    score: 94,
-    ai_note: 'Momentum técnico excepcional. Extensión natural de tu posición actual. Revenue acelerado por demanda de H100. RSI semanal en zona saludable (65) sin sobrecompra.',
-    already_in_portfolio: true,
-    already_in_watchlist: false,
-  },
-  {
-    symbol: 'META',
-    name: 'Meta Platforms Inc.',
-    price: 498.50,
-    market_cap: 1_270_000_000_000,
-    revenue_growth_pct: 27.3,
-    ath_distance_pct: -4.1,
-    rsi_weekly: 58,
-    eps_next_estimate: 5.17,
-    volume_avg: 18_000_000,
-    score: 87,
-    ai_note: 'Monetización de Reels mejorando. Costos de infrastructure IA bajo control. Margen operativo expandiéndose a 38%. Diversificación de exposición tech sin solaparse con AAPL.',
-    already_in_portfolio: false,
-    already_in_watchlist: true,
-  },
-  {
-    symbol: 'CRWD',
-    name: 'CrowdStrike Holdings',
-    price: 358.20,
-    market_cap: 88_700_000_000,
-    revenue_growth_pct: 31.7,
-    ath_distance_pct: -12.4,
-    rsi_weekly: 61,
-    eps_next_estimate: 0.93,
-    volume_avg: 6_500_000,
-    next_earnings_date: addDays(28),
-    score: 79,
-    ai_note: 'Ciberseguridad cloud-native con ARR creciendo 33% YoY. Net Revenue Retention >120%. Segmento no representado en tu portafolio actual — buena diversificación sectorial.',
-    already_in_portfolio: false,
-    already_in_watchlist: false,
-  },
-  {
-    symbol: 'MSFT',
-    name: 'Microsoft Corporation',
-    price: 420.18,
-    market_cap: 3_120_000_000_000,
-    revenue_growth_pct: 17.6,
-    ath_distance_pct: -7.8,
-    rsi_weekly: 55,
-    eps_next_estimate: 3.10,
-    volume_avg: 22_000_000,
-    score: 76,
-    ai_note: 'Sólido pero ya tienes posición. Azure creciendo 31% YoY. El peso actual de 14.2% en tu portafolio no justifica ampliar — scoring moderado por concentración ya existente.',
-    already_in_portfolio: true,
-    already_in_watchlist: false,
-  },
-  {
-    symbol: 'SHOP',
-    name: 'Shopify Inc.',
-    price: 71.45,
-    market_cap: 91_200_000_000,
-    revenue_growth_pct: 24.2,
-    ath_distance_pct: -38.1,
-    rsi_weekly: 48,
-    eps_next_estimate: 0.21,
-    volume_avg: 9_800_000,
-    score: 68,
-    ai_note: 'Revenue growth saludable pero ATH distance elevada (-38%). RSI semanal bajo 50 indica momentum técnico débil. Esperar confirmación por sobre $75 antes de entrada.',
-    already_in_portfolio: false,
-    already_in_watchlist: false,
-  },
-]
-
-const MOCK_AI_SUMMARY =
-  'NVDA extiende tu posición existente con momentum técnico excepcional. META y CRWD representan exposición nueva sin solapamiento: ads-tech y ciberseguridad. MSFT ya está en portafolio; ampliar solo si recortás primero. SHOP requiere confirmación técnica.'
+const MOCK_RESULTS: ScreenerResultItem[] = []
+const MOCK_AI_SUMMARY = ''
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ScreenerPanel
@@ -160,7 +50,7 @@ export default function ScreenerPanel({
     }
   )
   const [isRunning, setIsRunning] = useState(false)
-  const [hasRun, setHasRun]   = useState(true) // true = mostrar mock results por defecto
+  const [hasRun, setHasRun]   = useState(false)
   const [showSave, setShowSave] = useState(false)
 
   function handlePresetChange(presetId: string) {
