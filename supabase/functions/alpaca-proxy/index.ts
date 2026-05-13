@@ -136,6 +136,24 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // ── GET /quote/:symbol ───────────────────────────────────────────────
+    if (req.method === "GET" && subPath.startsWith("/quote/")) {
+      const symbol = subPath.split("/").pop()?.toUpperCase();
+      if (!symbol) return errJson("Symbol requerido");
+
+      const res = await fetch(`https://data.alpaca.markets/v2/stocks/${symbol}/quotes/latest`, {
+        headers: alpacaHeaders,
+      });
+      const data = await res.json();
+      if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
+
+      return jsonResponse({
+        symbol: data.symbol,
+        price: data.quote.ap || data.quote.bp || 0, // Ask price or Bid price
+        timestamp: data.quote.t,
+      });
+    }
+
     // ── GET /bars/:symbol?timeframe=1Day&limit=100 ────────────────────────
     if (req.method === "GET" && subPath.startsWith("/bars/")) {
       const symbol = subPath.split("/").pop()?.toUpperCase();

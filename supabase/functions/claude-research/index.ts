@@ -77,7 +77,7 @@ Deno.serve(async (req: Request) => {
   const fromStr = from.toISOString().split("T")[0]
   const toStr   = now.toISOString().split("T")[0]
 
-  const [barsResult, fmpResult, positionResult, portfolioResult, accountResult] = await Promise.allSettled([
+  const [barsResult, fmpResult, positionResult, portfolioResult, accountResult, quoteResult] = await Promise.allSettled([
     // Técnicos (Alpaca)
     fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/bars/${sym}?timeframe=1Week&limit=30`, {
       headers: { Authorization: authHeader },
@@ -98,6 +98,11 @@ Deno.serve(async (req: Request) => {
     fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/account`, {
       headers: { Authorization: authHeader },
     }).then(r => r.json()).catch(() => null),
+
+    // Fresh quote (Alpaca fallback)
+    fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/quote/${sym}`, {
+      headers: { Authorization: authHeader },
+    }).then(r => r.json()).catch(() => null),
   ])
 
   const barsResultData = barsResult.status === "fulfilled" ? barsResult.value : null
@@ -113,18 +118,20 @@ Deno.serve(async (req: Request) => {
     ? portfolioResult.value.data
     : null
 
-  const accountData = accountResult.status === "fulfilled"
-    ? accountResult.value
-    : null
+  const accountData = accountResult.status === "fulfilled" ? accountResult.value : null
+  const quoteData   = quoteResult.status === "fulfilled" ? quoteResult.value : null
 
   // Usar equity fresco si está disponible
   const totalEquity = accountData?.equity ?? portfolioData?.total_equity ?? 0
+
+  // Precio fresco de Alpaca si FMP falla
+  const alpacaPrice = quoteData?.price ?? (bars.length ? bars[bars.length - 1]?.c : null)
 
   // Calcular RSI semanal (14 períodos)
   const rsiWeekly = bars.length >= 15 ? calculateRSI(bars.map((b: Bar) => b.c), 14) : null
 
   // Precio y ATH desde FMP o barras
-  const price       = fmpData?.price        ?? (bars.length ? bars[bars.length - 1]?.c : null)
+  const price       = fmpData?.price        ?? alpacaPrice
   const week52High  = fmpData?.week_52_high ?? (bars.length ? Math.max(...bars.map((b: Bar) => b.h)) : 0)
   const week52Low   = fmpData?.week_52_low  ?? (bars.length ? Math.min(...bars.map((b: Bar) => b.l)) : 0)
   const athDist     = week52High > 0 && price
@@ -277,13 +284,13 @@ function calculateRSI(closes: number[], period = 14): number | null {
   return Math.round(100 - 100 / (1 + rs))
 }
 
-function fmt(n: number | null | undefined, decimals = 2): string {
-  if (n === null || n === undefined) return "N/D"
+function fmt(n: number | null | undefined, decimals = 2, fallback = "N/D"): string {
+  if (n === null || n === undefined) return fallback
   return n.toFixed(decimals)
 }
 
-function fmtSign(n: number | null | undefined, decimals = 2): string {
-  if (n === null || n === undefined) return "N/D"
+function fmtSign(n: number | null | undefined, decimals = 2, fallback = "N/D"): string {
+  if (n === null || n === undefined) return fallback
   const sign = n > 0 ? "+" : ""
   return `${sign}${n.toFixed(decimals)}`
 }
@@ -301,7 +308,7 @@ function buildDataContext(
         )
         return diff > 0 ? `${snap.next_earnings_date} (en ${diff} días)` : snap.next_earnings_date
       })()
-    : "No disponible"
+    : "No disponible vía datos fundamentales"
 
   const posLine = ctx.has_position
     ? [
@@ -312,17 +319,19 @@ function buildDataContext(
       ].join(" | ")
     : "Sin posición"
 
-  return `Datos de ${symbol} al ${now.toLocaleDateString("es-AR")}:
+  const fundUnavailable = "No disponible vía datos técnicos"
+
+  return `Datos de ${symbol} al ${now.toLocaleDateString("es-CO")}:
 
 Precio: $${fmt(snap.price)} | Cambio 1d: ${fmtSign(snap.price_change_pct_1d)}%
 Dist. ATH (52w high): ${fmtSign(snap.ath_distance_pct)}%
-RSI semanal (14): ${snap.rsi_weekly ?? "N/D"}
+RSI semanal (14): ${snap.rsi_weekly ?? "No disponible"}
 Volumen: ${snap.volume?.toLocaleString() ?? "N/D"} | Vol. prom. 30d: ${snap.volume_avg_30d?.toFixed(0) ?? "N/D"}
-Market Cap: ${snap.market_cap ? "$" + (snap.market_cap / 1e9).toFixed(1) + "B" : "N/D"}
+Market Cap: ${snap.market_cap ? "$" + (snap.market_cap / 1e9).toFixed(1) + "B" : fundUnavailable}
 
-EPS actual: $${fmt(snap.eps_current)} | EPS est. Q+1: $${fmt(snap.eps_next_estimate)} (${fmtSign(snap.eps_growth_next_pct)}%)
-Revenue growth YoY: ${fmtSign(snap.revenue_growth_pct)}%
-P/E ratio: ${fmt(snap.pe_ratio, 1)}
+EPS actual: $${fmt(snap.eps_current, 2, fundUnavailable)} | EPS est. Q+1: $${fmt(snap.eps_next_estimate, 2, fundUnavailable)} (${fmtSign(snap.eps_growth_next_pct, 2, fundUnavailable)})
+Revenue growth YoY: ${fmtSign(snap.revenue_growth_pct, 2, fundUnavailable)}%
+P/E ratio: ${fmt(snap.pe_ratio, 1, fundUnavailable)}
 52w High: $${fmt(snap.week_52_high)} | 52w Low: $${fmt(snap.week_52_low)}
 
 Próximo earnings: ${earningsLine}
@@ -331,11 +340,11 @@ Posición del usuario: ${posLine}`
 }
 
 function buildSystemPrompt(): string {
-  return `Sos un analista financiero senior especializado en mercados NYSE y cripto.
-Respondés SIEMPRE en español. Sos directo, concreto y usás los datos proporcionados.
-No inventés datos que no están en el contexto.
+  return `Eres un analista financiero senior especializado en mercados NYSE y cripto.
+Responde SIEMPRE en español neutro (evita el voseo). Eres directo, concreto y usas los datos proporcionados.
+No inventes datos que no estén en el contexto.
 
-Estructurás tu respuesta en EXACTAMENTE estas 7 secciones con sus headers exactos:
+Estructura tu respuesta en EXACTAMENTE estas 7 secciones con sus headers exactos:
 
 📊 CUADRO DE MANDO
 📈 TESIS DE INVERSIÓN
@@ -346,11 +355,11 @@ Estructurás tu respuesta en EXACTAMENTE estas 7 secciones con sus headers exact
 📅 PRÓXIMO CATALIZADOR
 
 Reglas:
-- Si el usuario no tiene posición, omitís completamente la sección 💼 TU EXPOSICIÓN
-- En ⚠️ RIESGOS listás máximo 3 riesgos concretos y específicos (no genéricos)
-- En 📊 CUADRO DE MANDO incluís una línea con precio, dist. ATH y RSI como tabla rápida
-- En 📉 ANÁLISIS FUNDAMENTAL usás EPS vs guidance, revenue growth y P/E con datos exactos
-- En 📐 NIVELES TÉCNICOS citás soporte/resistencia y RSI con interpretación concreta
-- En 📅 PRÓXIMO CATALIZADOR si hay earnings en < 30 días, marcás con ⚠️
-- Tono: analítico, sin jerga innecesaria, sin frases vacías como "es importante considerar"`
+- Si el usuario no tiene posición, omite completamente la sección 💼 TU EXPOSICIÓN
+- En ⚠️ RIESGOS enlista máximo 3 riesgos concretos y específicos (no genéricos)
+- En 📊 CUADRO DE MANDO incluye una línea con precio, dist. ATH y RSI como tabla rápida
+- En 📉 ANÁLISIS FUNDAMENTAL usa EPS vs guidance, revenue growth y P/E con datos exactos. Si los datos no están disponibles, indícalo explícitamente mencionando que el análisis se centra en lo técnico por falta de datos fundamentales.
+- En 📐 NIVELES TÉCNICOS cita soporte/resistencia y RSI con interpretación concreta
+- En 📅 PRÓXIMO CATALIZADOR si hay earnings en < 30 días, marca con ⚠️
+- Tono: analítico, sin jerga innecesaria, sin frases vacías como "es importante considerar" o "en mi opinión"`
 }

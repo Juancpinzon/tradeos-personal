@@ -139,7 +139,7 @@ async function getFundamentals(
   const estimates = Array.isArray(estimatesData) ? estimatesData[0] : null
 
   if (!quote) {
-    console.warn(`FMP: No quote found for ${symbol}. Body:`, JSON.stringify(quoteData))
+    console.warn(`FMP: No quote found for ${symbol}. Full Body:`, JSON.stringify({ quoteData, incomeData, estimatesData }))
     return json({ source: "fmp", data: null }, 404)
   }
 
