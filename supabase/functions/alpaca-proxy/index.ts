@@ -141,7 +141,7 @@ Deno.serve(async (req: Request) => {
       const symbol = subPath.split("/").pop()?.toUpperCase();
       if (!symbol) return errJson("Symbol requerido");
 
-      const res = await fetch(`https://data.alpaca.markets/v2/stocks/${symbol}/quotes/latest`, {
+      const res = await fetch(`https://data.alpaca.markets/v2/stocks/${symbol}/trades/latest`, {
         headers: alpacaHeaders,
       });
       const data = await res.json();
@@ -149,8 +149,8 @@ Deno.serve(async (req: Request) => {
 
       return jsonResponse({
         symbol: data.symbol,
-        price: data.quote.ap || data.quote.bp || 0, // Ask price or Bid price
-        timestamp: data.quote.t,
+        price: data.trade.p, // Last trade price
+        timestamp: data.trade.t,
       });
     }
 

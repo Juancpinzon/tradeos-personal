@@ -12,6 +12,7 @@ import { PortfolioContextPanel } from './PortfolioContextPanel'
 import { useResearch } from '../../hooks/useResearch'
 import type { ResearchEntry } from '../../types'
 import { formatDate } from '../../lib/formatters'
+import { RotateCcw } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sección headers con emoji — Syne 600 12px uppercase tracking-wider
@@ -209,6 +210,7 @@ export function ResearchPanel() {
   const [symbolInput, setSymbolInput] = useState('')
   const [queryInput, setQueryInput] = useState('')
   const analysisRef = useRef<HTMLDivElement>(null)
+  const symbolRef = useRef<HTMLInputElement>(null)
 
   const {
     analyzeSymbol,
@@ -221,6 +223,7 @@ export function ResearchPanel() {
     currentSymbol,
     history,
     loadHistoryEntry,
+    reset,
   } = useResearch()
 
   // Auto-scroll al final mientras llega el stream
@@ -255,6 +258,7 @@ export function ResearchPanel() {
         {/* Símbolo */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <input
+            ref={symbolRef}
             type="text"
             value={symbolInput}
             onChange={e => setSymbolInput(e.target.value.toUpperCase())}
@@ -349,6 +353,46 @@ export function ResearchPanel() {
             </>
           )}
         </button>
+
+        {/* Botón Nuevo Análisis */}
+        {hasResult && !isLoading && !isStreaming && (
+          <button
+            type="button"
+            onClick={() => {
+              reset()
+              setSymbolInput('')
+              setQueryInput('')
+              setTimeout(() => symbolRef.current?.focus(), 0)
+            }}
+            style={{
+              background: 'var(--bg-elevated)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-default)',
+              borderRadius: '6px',
+              padding: '9px 18px',
+              fontSize: '13px',
+              fontWeight: 600,
+              fontFamily: 'Syne, system-ui, sans-serif',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 150ms',
+              alignSelf: 'stretch',
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-primary)'
+              (e.currentTarget as HTMLElement).style.color = 'var(--color-primary)'
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'
+              (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'
+            }}
+          >
+            <RotateCcw size={14} />
+            Nuevo análisis
+          </button>
+        )}
       </form>
 
       {/* ── Error ─────────────────────────────────────────────────────────── */}

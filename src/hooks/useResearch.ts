@@ -162,6 +162,17 @@ export function useResearch(): UseResearchReturn {
     setCurrentPortfolioCtx(entry.portfolio_context)
   }, [])
 
+  // ── reset ──────────────────────────────────────────────────────────────
+  const reset = useCallback(() => {
+    setStreamingText('')
+    setIsStreaming(false)
+    setIsLoading(false)
+    setError(null)
+    setCurrentSnapshot(null)
+    setCurrentPortfolioCtx(null)
+    setCurrentSymbol(null)
+  }, [])
+
   return {
     analyzeSymbol,
     streamingText,
@@ -173,5 +184,6 @@ export function useResearch(): UseResearchReturn {
     currentSymbol,
     history,
     loadHistoryEntry,
+    reset,
   }
 }
