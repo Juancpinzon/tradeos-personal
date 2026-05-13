@@ -5,9 +5,10 @@
 // Botón "Revisar orden" abre ConfirmOrderModal. NUNCA ejecuta directamente.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from 'react'
-import { ChevronDown, TrendingUp, TrendingDown } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { ChevronDown, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react'
 import RiskCalculator from './RiskCalculator'
+import { formatCurrency, formatPercent } from '../../lib/formatters'
 import type { UserSettings } from '../../types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,6 +57,35 @@ export default function OrderForm({
     if (initialSymbol) setSymbol(initialSymbol.toUpperCase())
   }, [initialSymbol])
 
+  // Auto-cálculo de stop sugerido cuando cambia qty, precio o dirección
+  useEffect(() => {
+    const qtyNum = parseFloat(qty)
+    if (!currentPrice || currentPrice <= 0 || !qty || isNaN(qtyNum) || qtyNum <= 0) return
+    if (totalEquity <= 0) return
+    const riskBudget = totalEquity * (userSettings.risk_per_trade_pct / 100)
+    const stopDist = riskBudget / qtyNum
+    const suggested = side === 'buy' ? currentPrice - stopDist : currentPrice + stopDist
+    if (suggested > 0) {
+      setStopLoss(suggested.toFixed(2))
+      setErrors(prev => ({ ...prev, stop_loss: undefined }))
+    }
+  }, [qty, currentPrice, side, totalEquity, userSettings.risk_per_trade_pct])
+
+  // Display de riesgo real bajo el campo stop loss
+  const riskDisplay = useMemo(() => {
+    const sl = parseFloat(stopLoss)
+    const q = parseFloat(qty)
+    if (!stopLoss || isNaN(sl) || sl <= 0) return null
+    if (!qty || isNaN(q) || q <= 0) return null
+    if (!currentPrice || currentPrice <= 0) return null
+    const dist = side === 'buy' ? currentPrice - sl : sl - currentPrice
+    if (dist <= 0) return null
+    const riskReal = dist * q
+    const budget = totalEquity * (userSettings.risk_per_trade_pct / 100)
+    const riskPct = totalEquity > 0 ? (riskReal / totalEquity) * 100 : 0
+    return { riskReal, riskPct, exceedsBudget: riskReal > budget }
+  }, [stopLoss, qty, currentPrice, side, totalEquity, userSettings.risk_per_trade_pct])
+
   // Precio estimado para la orden
   const estimatedPrice =
     orderType === 'market'
@@ -92,11 +122,15 @@ export default function OrderForm({
       errs.stop_loss = 'Stop loss obligatorio para calcular riesgo'
     } else {
       const sl = parseFloat(stopLoss)
-      const ep = entryPriceNum
-      if (ep) {
-        const invalid = side === 'buy' ? sl >= ep : sl <= ep
-        if (invalid) {
-          errs.stop_loss = `Stop loss debe estar ${side === 'buy' ? 'por debajo' : 'por encima'} del precio de entrada`
+      if (isNaN(sl) || sl <= 0) {
+        errs.stop_loss = 'El stop loss debe ser mayor a $0'
+      } else {
+        const ep = entryPriceNum
+        if (ep) {
+          const invalid = side === 'buy' ? sl >= ep : sl <= ep
+          if (invalid) {
+            errs.stop_loss = `Stop loss debe estar ${side === 'buy' ? 'por debajo' : 'por encima'} del precio de entrada`
+          }
         }
       }
     }
@@ -257,6 +291,19 @@ export default function OrderForm({
             />
           </div>
           {errors.stop_loss && <span className="form-error">{errors.stop_loss}</span>}
+          {riskDisplay && !errors.stop_loss && (
+            <div className="stop-risk-info">
+              <span className="stop-risk-info__main font-mono">
+                Riesgo máximo: {formatCurrency(riskDisplay.riskReal)} ({formatPercent(riskDisplay.riskPct, false)} del portafolio)
+              </span>
+              {riskDisplay.exceedsBudget && (
+                <div className="stop-risk-info__warning">
+                  <AlertTriangle size={11} />
+                  Este stop supera tu límite de riesgo por operación ({userSettings.risk_per_trade_pct}%)
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Target (optional) */}
@@ -397,6 +444,24 @@ export default function OrderForm({
         }
         .input-with-prefix {
           padding-left: 24px !important;
+        }
+        .stop-risk-info {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          margin-top: 1px;
+        }
+        .stop-risk-info__main {
+          font-size: 0.68rem;
+          color: var(--text-muted);
+        }
+        .stop-risk-info__warning {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 0.68rem;
+          color: var(--color-warning);
+          font-weight: 500;
         }
         .select-wrapper {
           position: relative;

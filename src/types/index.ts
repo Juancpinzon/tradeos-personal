@@ -337,7 +337,7 @@ export interface OrderPayload {
   stop_price?: number;
   risk_amount?: number;
   portfolio_weight_at_order?: number;
-  stop_loss_price?: number;
+  stop_loss_price: number;
   target_price?: number;
   risk_reward_ratio?: number;
 }

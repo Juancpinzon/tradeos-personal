@@ -170,19 +170,17 @@ export default function ConfirmOrderModal({
                   </td>
                 </tr>
               )}
-              {stopLoss > 0 && (
-                <tr>
-                  <td className="modal-table__label">Stop loss</td>
-                  <td className="modal-table__value font-mono" style={{ color: 'var(--color-warning)' }}>
-                    {formatCurrency(stopLoss)}
-                    {stopDistance > 0 && (
-                      <span className="modal-table__sub">
-                        -{formatPercent((stopDistance / entryPrice) * 100, false)} desde entrada
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              )}
+              <tr>
+                <td className="modal-table__label">Stop loss</td>
+                <td className="modal-table__value font-mono" style={{ color: 'var(--color-warning)' }}>
+                  {stopLoss > 0 ? formatCurrency(stopLoss) : '—'}
+                  {stopDistance > 0 && (
+                    <span className="modal-table__sub">
+                      -{formatPercent((stopDistance / entryPrice) * 100, false)} desde entrada
+                    </span>
+                  )}
+                </td>
+              </tr>
               {target && target > 0 && (
                 <tr>
                   <td className="modal-table__label">Target</td>

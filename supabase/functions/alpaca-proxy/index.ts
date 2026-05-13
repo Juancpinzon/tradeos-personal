@@ -250,6 +250,8 @@ Deno.serve(async (req: Request) => {
         return errJson("side inválido");
       if (!order_type) return errJson("order_type requerido");
       if (!qty || qty <= 0) return errJson("qty debe ser > 0");
+      if (!stop_loss_price || stop_loss_price <= 0)
+        return errJson("stop_loss_price es obligatorio");
 
       const alpacaPayload: Record<string, unknown> = {
         symbol: symbol.toUpperCase(),

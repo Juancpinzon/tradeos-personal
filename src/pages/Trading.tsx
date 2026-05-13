@@ -163,7 +163,7 @@ export default function Trading() {
                                     : undefined,
         risk_amount:              riskAmount,
         portfolio_weight_at_order: portfolioWeightAtOrder ?? undefined,
-        stop_loss_price:          pendingDraft.stop_loss ?? undefined,
+        stop_loss_price:          pendingDraft.stop_loss as number,
         target_price:             pendingDraft.target ?? undefined,
         risk_reward_ratio:        rrRatio,
       })
