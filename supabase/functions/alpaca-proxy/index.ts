@@ -45,6 +45,26 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  // ── GET /debug-auth — muestra resultado de auth.getUser ──────────────────
+  if (req.method === "GET" && subPath === "/debug-auth") {
+    const ah = req.headers.get("Authorization") ?? "MISSING";
+    const userClient2 = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: ah } },
+    });
+    const {
+      data: { user: u },
+      error: e,
+    } = await userClient2.auth.getUser();
+    return jsonResponse({
+      auth_header_present: ah !== "MISSING",
+      auth_header_prefix: ah.substring(0, 30),
+      user_id: u?.id ?? null,
+      user_email: u?.email ?? null,
+      auth_error: e?.message ?? null,
+      anon_key_prefix: supabaseAnonKey.substring(0, 20),
+    });
+  }
+
   // ── Auth — patrón estándar Supabase ──────────────────────────────────────
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
