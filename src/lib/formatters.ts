@@ -73,13 +73,22 @@ export function formatQty(value: number, decimals?: number): string {
 }
 
 /**
- * Formatea números grandes con sufijos K/M/B/T.
+ * Formatea números grandes con sufijos K/M/B/T (con $).
  * @example formatLargeNumber(1_500_000) → "$1.5M"
  */
 export function formatLargeNumber(value: number): string {
-  if (Math.abs(value) >= 1e12) return `$${(value / 1e12).toFixed(1)}T`
-  if (Math.abs(value) >= 1e9)  return `$${(value / 1e9).toFixed(1)}B`
-  if (Math.abs(value) >= 1e6)  return `$${(value / 1e6).toFixed(1)}M`
-  if (Math.abs(value) >= 1e3)  return `$${(value / 1e3).toFixed(1)}K`
-  return formatCurrency(value)
+  return `$${formatCompactNumber(value)}`
+}
+
+/**
+ * Formatea números grandes con sufijos K/M/B/T (sin moneda).
+ * @example formatCompactNumber(1_500_000) → "1.5M"
+ */
+export function formatCompactNumber(value: number): string {
+  const abs = Math.abs(value)
+  if (abs >= 1e12) return `${(value / 1e12).toFixed(1)}T`
+  if (abs >= 1e9)  return `${(value / 1e9).toFixed(1)}B`
+  if (abs >= 1e6)  return `${(value / 1e6).toFixed(1)}M`
+  if (abs >= 1e3)  return `${(value / 1e3).toFixed(1)}K`
+  return value.toString()
 }

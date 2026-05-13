@@ -136,6 +136,27 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // ── GET /bars/:symbol?timeframe=1Day&limit=100 ────────────────────────
+    if (req.method === "GET" && subPath.startsWith("/bars/")) {
+      const symbol = subPath.split("/").pop()?.toUpperCase();
+      if (!symbol) return errJson("Symbol requerido");
+
+      const timeframe = url.searchParams.get("timeframe") ?? "1Day";
+      const limit = url.searchParams.get("limit") ?? "100";
+      const start = url.searchParams.get("start");
+      const end = url.searchParams.get("end");
+
+      let barsUrl = `https://data.alpaca.markets/v2/stocks/${symbol}/bars?timeframe=${timeframe}&limit=${limit}`;
+      if (start) barsUrl += `&start=${start}`;
+      if (end) barsUrl += `&end=${end}`;
+
+      const res = await fetch(barsUrl, { headers: alpacaHeaders });
+      const data = await res.json();
+      if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
+
+      return jsonResponse(data);
+    }
+
     // ── GET /positions ────────────────────────────────────────────────────
     if (req.method === "GET" && subPath === "/positions") {
       const res = await fetch(`${baseUrl}/v2/positions`, {

@@ -72,56 +72,53 @@ Deno.serve(async (req: Request) => {
   const alpacaHeaders: Record<string, string> = alpacaKey && alpacaSecret
     ? { "APCA-API-KEY-ID": alpacaKey, "APCA-API-SECRET-KEY": alpacaSecret }
     : {}
-
   const now    = new Date()
   const from   = new Date(now); from.setMonth(from.getMonth() - 14)
   const fromStr = from.toISOString().split("T")[0]
   const toStr   = now.toISOString().split("T")[0]
 
-  const [barsResult, fmpResult, positionResult] = await Promise.allSettled([
-    // Barras semanales últimos 14 meses para calcular RSI(14)
-    alpacaKey
-      ? fetch(
-          `${ALPACA_BASE}/v2/stocks/${sym}/bars?timeframe=1Week&start=${fromStr}&end=${toStr}&limit=60`,
-          { headers: alpacaHeaders }
-        ).then(r => r.json())
-      : Promise.resolve(null),
-
-    // FMP fundamentals (usa cache interno del fmp-proxy si está disponible)
+  const [barsResult, fmpResult, positionResult, portfolioResult, accountResult] = await Promise.allSettled([
+    // Técnicos (Alpaca)
+    fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/bars/${sym}?timeframe=1Week&limit=30`, {
+      headers: { Authorization: authHeader },
+    }).then(r => r.json()),
+    
+    // Fundamentales (FMP Proxy)
     fetch(`${supabaseUrl}/functions/v1/fmp-proxy/fundamentals/${sym}`, {
       headers: { Authorization: authHeader },
     }).then(r => r.json()).catch(() => null),
 
-    // Posición actual del usuario en ese símbolo
-    supabase
-      .from("positions")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("symbol", sym)
-      .maybeSingle(),
+    // Posición del usuario
+    supabase.from("positions").select("*").eq("user_id", user.id).eq("symbol", sym).maybeSingle(),
+
+    // Datos portafolio (cache DB)
+    supabase.from("portfolios").select("total_equity").eq("user_id", user.id).maybeSingle(),
+
+    // Fresh equity (Alpaca)
+    fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/account`, {
+      headers: { Authorization: authHeader },
+    }).then(r => r.json()).catch(() => null),
   ])
 
-  // ── Equity total ─────────────────────────────────────────────────────────────
-  const { data: latestSnap } = await supabase
-    .from("equity_snapshots")
-    .select("equity")
-    .eq("user_id", user.id)
-    .order("snapshot_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const totalEquity = latestSnap?.equity ?? null
-
-  // ── Procesar datos ──────────────────────────────────────────────────────────
-  const bars: Bar[] = barsResult.status === "fulfilled" && barsResult.value?.bars
-    ? barsResult.value.bars
-    : []
+  const barsResultData = barsResult.status === "fulfilled" ? barsResult.value : null
+  const bars: Bar[] = barsResultData?.bars || []
 
   const fmpData = fmpResult.status === "fulfilled" ? fmpResult.value?.data : null
 
   const position = positionResult.status === "fulfilled"
     ? positionResult.value.data
     : null
+
+  const portfolioData = portfolioResult.status === "fulfilled"
+    ? portfolioResult.value.data
+    : null
+
+  const accountData = accountResult.status === "fulfilled"
+    ? accountResult.value
+    : null
+
+  // Usar equity fresco si está disponible
+  const totalEquity = accountData?.equity ?? portfolioData?.total_equity ?? 0
 
   // Calcular RSI semanal (14 períodos)
   const rsiWeekly = bars.length >= 15 ? calculateRSI(bars.map((b: Bar) => b.c), 14) : null
@@ -158,14 +155,20 @@ Deno.serve(async (req: Request) => {
     fetched_at:           new Date().toISOString(),
   }
 
+  const currentPrice = price ?? position?.current_price ?? 0
+  const marketValue  = (position?.qty ?? 0) * currentPrice
+  const weightPct    = totalEquity && totalEquity > 0 
+    ? (marketValue / totalEquity) * 100 
+    : (position?.portfolio_weight_pct ?? 0)
+
   const portfolioCtx = {
     has_position:         !!position,
     qty:                  position?.qty,
     avg_entry_price:      position?.avg_entry_price,
-    current_price:        position?.current_price,
+    current_price:        currentPrice,
     unrealized_pnl:       position?.unrealized_pnl,
     unrealized_pnl_pct:   position?.unrealized_pnl_pct,
-    portfolio_weight_pct: position?.portfolio_weight_pct,
+    portfolio_weight_pct: weightPct,
     total_portfolio_equity: totalEquity,
   }
 
@@ -192,6 +195,14 @@ Deno.serve(async (req: Request) => {
 
   ;(async () => {
     try {
+      // ── Enviar metadatos como primer chunk ──────────────────────────────────
+      const metadataChunk = JSON.stringify({
+        type: "metadata",
+        dataSnapshot,
+        portfolioCtx,
+      })
+      await writer.write(encoder.encode(metadataChunk + "--METADATA_END--"))
+
       for await (const chunk of stream) {
         if (
           chunk.type === "content_block_delta" &&

@@ -98,6 +98,7 @@ export function useResearch(): UseResearchReturn {
       setIsStreaming(true)
 
       let accumulated = ''
+      let metadataFound = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -105,7 +106,36 @@ export function useResearch(): UseResearchReturn {
 
         const chunk = decoder.decode(value, { stream: true })
         accumulated += chunk
-        setStreamingText(accumulated)
+
+        // ── Detectar y parsear metadatos ──────────────────────────────────────
+        // Buscamos el delimitador. Si no se encuentra, seguimos acumulando.
+        if (!metadataFound) {
+          const delimiter = "--METADATA_END--"
+          const index = accumulated.indexOf(delimiter)
+          
+          if (index !== -1) {
+            const metadataStr = accumulated.substring(0, index).trim()
+            // El resto es texto de Claude
+            accumulated = accumulated.substring(index + delimiter.length).trimStart()
+            
+            try {
+              const metadata = JSON.parse(metadataStr)
+              if (metadata && metadata.type === 'metadata') {
+                setCurrentSnapshot(metadata.dataSnapshot)
+                setCurrentPortfolioCtx(metadata.portfolioCtx)
+              }
+            } catch (e) {
+              console.error('Error parsing metadata chunk:', e, 'Raw:', metadataStr)
+            } finally {
+              metadataFound = true // Marcamos como encontrado incluso si falló el parseo
+            }
+          }
+        }
+
+        // Una vez que el metadata fue procesado (o falló), empezamos a mostrar el texto
+        if (metadataFound) {
+          setStreamingText(accumulated)
+        }
       }
 
       setIsStreaming(false)

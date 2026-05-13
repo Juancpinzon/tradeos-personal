@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { ResearchDataSnapshot } from '../../types'
-import { formatCurrency, formatPercent, formatLargeNumber } from '../../lib/formatters'
+import { formatCurrency, formatPercent, formatLargeNumber, formatCompactNumber } from '../../lib/formatters'
 
 interface Props {
   data: ResearchDataSnapshot
@@ -81,11 +81,12 @@ export function KpiGrid({ data }: Props) {
       subColor: pnlColor(data.eps_growth_next_pct),
     },
     {
-      label: 'CRECIMIENTO EPS',
-      value: data.eps_growth_next_pct !== undefined && data.eps_growth_next_pct !== null
-        ? formatPercent(data.eps_growth_next_pct)
+      label: 'VOLUMEN PROM.',
+      value: data.volume_avg_30d !== undefined && data.volume_avg_30d !== null
+        ? formatCompactNumber(data.volume_avg_30d)
         : 'N/D',
-      subColor: pnlColor(data.eps_growth_next_pct),
+      subValue: data.volume ? `Actual: ${formatCompactNumber(data.volume)}` : undefined,
+      subColor: 'neutral',
     },
     {
       label: 'REV. GROWTH YoY',

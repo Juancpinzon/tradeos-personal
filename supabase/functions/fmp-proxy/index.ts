@@ -113,18 +113,35 @@ async function getFundamentals(
     fetch(`${FMP_BASE}/analyst-estimates/${symbol}?limit=1&apikey=${fmpKey}`),
   ])
 
+  if (!quoteRes.ok || !incomeRes.ok || !estimatesRes.ok) {
+    console.error(`FMP API Error:`, {
+      quote: { status: quoteRes.status, ok: quoteRes.ok },
+      income: { status: incomeRes.status, ok: incomeRes.ok },
+      estimates: { status: estimatesRes.status, ok: estimatesRes.ok }
+    })
+  }
+
   const [quoteData, incomeData, estimatesData] = await Promise.all([
     quoteRes.json(),
     incomeRes.json(),
     estimatesRes.json(),
   ])
 
+  console.log(`FMP Response for ${symbol}:`, { 
+    hasQuote: Array.isArray(quoteData) && quoteData.length > 0,
+    hasIncome: Array.isArray(incomeData) && incomeData.length > 0,
+    hasEstimates: Array.isArray(estimatesData) && estimatesData.length > 0
+  })
+
   const quote     = Array.isArray(quoteData) ? quoteData[0] : null
   const thisYear  = Array.isArray(incomeData) ? incomeData[0] : null
   const lastYear  = Array.isArray(incomeData) ? incomeData[1] : null
   const estimates = Array.isArray(estimatesData) ? estimatesData[0] : null
 
-  if (!quote) return json({ source: "fmp", data: null }, 404)
+  if (!quote) {
+    console.warn(`FMP: No quote found for ${symbol}. Body:`, JSON.stringify(quoteData))
+    return json({ source: "fmp", data: null }, 404)
+  }
 
   // Calcular revenue growth YoY
   const revenueGrowthPct = thisYear && lastYear && lastYear.revenue > 0
@@ -170,6 +187,14 @@ async function getFundamentals(
     pe_ratio:                   payload.pe_ratio,
     next_earnings_date:         payload.next_earnings_date,
     next_earnings_estimate_eps: payload.next_earnings_estimate_eps,
+    // Nuevos campos para cache completo
+    price:                      payload.price,
+    market_cap:                 payload.market_cap,
+    week_52_high:               payload.week_52_high,
+    week_52_low:                payload.week_52_low,
+    price_change_pct_1d:        payload.price_change_pct_1d,
+    volume:                     payload.volume,
+    name:                       payload.name,
     fetched_at:                 new Date().toISOString(),
   })
 
