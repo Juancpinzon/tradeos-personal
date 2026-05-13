@@ -35,15 +35,37 @@ Deno.serve(async (req: Request) => {
   const pathParts = url.pathname.split("/alpaca-proxy");
   const subPath = pathParts[1] ?? "/";
 
-  if (req.method === "GET" && subPath === "/debug") {
+  if (req.method === "GET" && subPath === "/account") {
+    console.log("Reached /account handler, userId:", userId.substring(0, 8));
+    const res = await fetch(`${baseUrl}/v2/account`, {
+      headers: alpacaHeaders,
+    });
+    console.log("Alpaca response status:", res.status);
+    const data = await res.json();
+    console.log("Alpaca data keys:", Object.keys(data));
+    if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
+
+    const equity = parseFloat(data.equity ?? data.portfolio_value ?? "0");
+    const cash = parseFloat(data.cash ?? "0");
+    const buyingPower = parseFloat(data.buying_power ?? "0");
+    const lastEquity = parseFloat(data.last_equity ?? data.equity ?? "0");
+    const pnlToday = equity - lastEquity;
+
+    await adminClient.from("equity_snapshots").insert({
+      user_id: userId,
+      broker: "alpaca",
+      equity,
+      cash,
+      buying_power: buyingPower,
+    });
+
     return jsonResponse({
-      fn_running: true,
-      supabase_url_set: !!supabaseUrl,
-      anon_key_set: !!supabaseAnonKey,
-      service_role_set: !!supabaseSvcKey,
-      alpaca_key_set: !!Deno.env.get("ALPACA_API_KEY"),
-      full_path: url.pathname,
-      sub_path: subPath,
+      equity,
+      cash,
+      buying_power: buyingPower,
+      pnl_today: pnlToday,
+      pnl_today_pct: lastEquity > 0 ? (pnlToday / lastEquity) * 100 : 0,
+      mode: alpacaMode,
     });
   }
 
