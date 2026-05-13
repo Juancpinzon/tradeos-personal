@@ -75,10 +75,11 @@ Deno.serve(async (req: Request) => {
     const userClient2 = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: ah } },
     });
+    const token = authHeader.replace("Bearer ", "");
     const {
-      data: { user: u },
-      error: e,
-    } = await userClient2.auth.getUser();
+      data: { user },
+      error: authError,
+    } = await userClient.auth.getUser(token);
     return jsonResponse({
       auth_header_present: ah !== "MISSING",
       auth_header_prefix: ah.substring(0, 30),
