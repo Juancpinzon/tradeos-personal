@@ -12,7 +12,7 @@ import { PortfolioContextPanel } from './PortfolioContextPanel'
 import { useResearch } from '../../hooks/useResearch'
 import type { ResearchEntry } from '../../types'
 import { formatDate } from '../../lib/formatters'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, ExternalLink, Copy, Download } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sección headers con emoji — Syne 600 12px uppercase tracking-wider
@@ -398,69 +398,77 @@ export function ResearchPanel() {
                 borderRadius: '8px',
                 padding: '20px 24px',
                 minHeight: '200px',
-                position: 'relative',
               }}
             >
-              {/* Toolbar de acciones (Copiar / Reset) */}
-              {hasResult && !isLoading && !isStreaming && (
+              {/* Toolbar de acciones (Copiar / Descargar / Nuevo) */}
+              {(hasResult || error) && !isLoading && !isStreaming && (
                 <div
                   style={{
-                    position: 'absolute',
-                    top: '12px',
-                    right: '12px',
                     display: 'flex',
-                    gap: '8px',
-                    zIndex: 10,
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    gap: '10px',
+                    marginBottom: '16px',
+                    paddingBottom: '12px',
+                    borderBottom: '1px solid var(--border-subtle)',
                   }}
                 >
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(streamingText)
-                      alert('Análisis copiado al portapapeles')
-                    }}
-                    title="Copiar análisis"
-                    style={{
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border-default)',
-                      borderRadius: '4px',
-                      padding: '4px 8px',
-                      cursor: 'pointer',
-                      color: 'var(--text-secondary)',
-                      fontSize: '11px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <span>📋</span> Copiar
-                  </button>
+                  {hasResult && (
+                    <>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(streamingText)
+                          alert('Análisis copiado al portapapeles')
+                        }}
+                        style={{
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border-default)',
+                          borderRadius: '6px',
+                          padding: '6px 12px',
+                          cursor: 'pointer',
+                          color: 'var(--text-secondary)',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 150ms',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
+                      >
+                        <Copy size={14} /> Copiar
+                      </button>
 
-                  <button
-                    onClick={() => {
-                      const element = document.createElement("a");
-                      const file = new Blob([streamingText], {type: 'text/plain'});
-                      element.href = URL.createObjectURL(file);
-                      element.download = `research_${currentSymbol || 'analysis'}.txt`;
-                      document.body.appendChild(element);
-                      element.click();
-                      document.body.removeChild(element);
-                    }}
-                    title="Descargar análisis"
-                    style={{
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border-default)',
-                      borderRadius: '4px',
-                      padding: '4px 8px',
-                      cursor: 'pointer',
-                      color: 'var(--text-secondary)',
-                      fontSize: '11px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <span>📥</span> Descargar
-                  </button>
+                      <button
+                        onClick={() => {
+                          const element = document.createElement("a");
+                          const file = new Blob([streamingText], {type: 'text/plain'});
+                          element.href = URL.createObjectURL(file);
+                          element.download = `research_${currentSymbol || 'analysis'}.txt`;
+                          document.body.appendChild(element);
+                          element.click();
+                          document.body.removeChild(element);
+                        }}
+                        style={{
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border-default)',
+                          borderRadius: '6px',
+                          padding: '6px 12px',
+                          cursor: 'pointer',
+                          color: 'var(--text-secondary)',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 150ms',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
+                      >
+                        <Download size={14} /> Descargar
+                      </button>
+                    </>
+                  )}
 
                   <button
                     onClick={() => {
@@ -469,21 +477,23 @@ export function ResearchPanel() {
                       setQueryInput('')
                       setTimeout(() => symbolRef.current?.focus(), 0)
                     }}
-                    title="Nuevo análisis"
                     style={{
                       background: 'var(--bg-elevated)',
                       border: '1px solid var(--border-default)',
-                      borderRadius: '4px',
-                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
                       cursor: 'pointer',
                       color: 'var(--text-secondary)',
-                      fontSize: '11px',
+                      fontSize: '12px',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '4px',
+                      gap: '6px',
+                      transition: 'all 150ms',
                     }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
                   >
-                    <RotateCcw size={12} /> Nuevo
+                    <RotateCcw size={14} /> Nuevo Análisis
                   </button>
                 </div>
               )}
@@ -544,16 +554,34 @@ export function ResearchPanel() {
                   }}
                 >
                   <span>DATOS FUENTE</span>
-                  <span
-                    style={{
-                      fontFamily: '"IBM Plex Mono", monospace',
-                      color: 'var(--color-primary)',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {displaySymbol}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span
+                      style={{
+                        fontFamily: '"IBM Plex Mono", monospace',
+                        color: 'var(--color-primary)',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {displaySymbol}
+                    </span>
+                    <a
+                      href={`https://www.tradingview.com/chart/?symbol=${displaySymbol}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Ver en TradingView"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: 'var(--text-muted)',
+                        transition: 'color 150ms',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-primary)'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                    >
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
                 </div>
 
                 {currentSnapshot ? (

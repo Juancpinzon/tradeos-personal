@@ -107,27 +107,41 @@ async function getFundamentals(
   }
 
   // 2. Llamar FMP en paralelo
+  const quoteUrl = `${FMP_BASE}/quote/${symbol}?apikey=${fmpKey}`;
+  const incomeUrl = `${FMP_BASE}/income-statement/${symbol}?limit=2&apikey=${fmpKey}`;
+  const estimatesUrl = `${FMP_BASE}/analyst-estimates/${symbol}?limit=1&apikey=${fmpKey}`;
+
+  console.log(`[FMP DIAGNOSTIC] Symbol: ${symbol}`);
+  console.log(`[FMP DIAGNOSTIC] Quote URL: ${quoteUrl.replace(fmpKey, '***')}`);
+
   const [quoteRes, incomeRes, estimatesRes] = await Promise.all([
-    fetch(`${FMP_BASE}/quote/${symbol}?apikey=${fmpKey}`),
-    fetch(`${FMP_BASE}/income-statement/${symbol}?limit=2&apikey=${fmpKey}`),
-    fetch(`${FMP_BASE}/analyst-estimates/${symbol}?limit=1&apikey=${fmpKey}`),
+    fetch(quoteUrl),
+    fetch(incomeUrl),
+    fetch(estimatesUrl),
   ])
 
-  if (!quoteRes.ok || !incomeRes.ok || !estimatesRes.ok) {
-    console.error(`FMP API Error:`, {
-      quote: { status: quoteRes.status, ok: quoteRes.ok },
-      income: { status: incomeRes.status, ok: incomeRes.ok },
-      estimates: { status: estimatesRes.status, ok: estimatesRes.ok }
-    })
+  console.log(`[FMP DIAGNOSTIC] HTTP Statuses: quote=${quoteRes.status}, income=${incomeRes.status}, estimates=${estimatesRes.status}`);
+
+  const [quoteRaw, incomeRaw, estimatesRaw] = await Promise.all([
+    quoteRes.text(),
+    incomeRes.text(),
+    estimatesRes.text(),
+  ])
+
+  console.log(`[FMP DIAGNOSTIC] Quote Body (500 chars): ${quoteRaw.substring(0, 500)}`);
+  console.log(`[FMP DIAGNOSTIC] Income Body (500 chars): ${incomeRaw.substring(0, 500)}`);
+
+  let quoteData, incomeData, estimatesData;
+  try {
+    quoteData = JSON.parse(quoteRaw);
+    incomeData = JSON.parse(incomeRaw);
+    estimatesData = JSON.parse(estimatesRaw);
+  } catch (e) {
+    console.error(`[FMP DIAGNOSTIC] JSON Parse Error:`, e);
+    return err("FMP returned invalid JSON", 502);
   }
 
-  const [quoteData, incomeData, estimatesData] = await Promise.all([
-    quoteRes.json(),
-    incomeRes.json(),
-    estimatesRes.json(),
-  ])
-
-  console.log(`FMP Response for ${symbol}:`, { 
+  console.log(`[FMP Response for ${symbol}]:`, { 
     hasQuote: Array.isArray(quoteData) && quoteData.length > 0,
     hasIncome: Array.isArray(incomeData) && incomeData.length > 0,
     hasEstimates: Array.isArray(estimatesData) && estimatesData.length > 0
@@ -139,7 +153,7 @@ async function getFundamentals(
   const estimates = Array.isArray(estimatesData) ? estimatesData[0] : null
 
   if (!quote) {
-    console.warn(`FMP: No quote found for ${symbol}. Full Body:`, JSON.stringify({ quoteData, incomeData, estimatesData }))
+    console.warn(`[FMP DIAGNOSTIC] No quote found for ${symbol}. Full Body:`, quoteRaw);
     return json({ source: "fmp", data: null }, 404)
   }
 

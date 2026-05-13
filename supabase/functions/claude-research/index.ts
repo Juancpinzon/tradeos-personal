@@ -359,7 +359,7 @@ Reglas:
 - En ⚠️ RIESGOS enlista máximo 3 riesgos concretos y específicos (no genéricos)
 - En 📊 CUADRO DE MANDO incluye una línea con precio, dist. ATH y RSI como tabla rápida
 - En 📉 ANÁLISIS FUNDAMENTAL usa EPS vs guidance, revenue growth y P/E con datos exactos. Si los datos no están disponibles, indícalo explícitamente mencionando que el análisis se centra en lo técnico por falta de datos fundamentales.
-- En 📐 NIVELES TÉCNICOS cita soporte/resistencia y RSI con interpretación concreta
-- En 📅 PRÓXIMO CATALIZADOR si hay earnings en < 30 días, marca con ⚠️
+- En 6. **📐 NIVELES TÉCNICOS**: Menciona niveles clave de soporte/resistencia. Analiza el **patrón de velas (candlesticks)** y la acción del precio reciente (ej: martillos, envolventes, consolidación).
+- En 7. **📅 PRÓXIMO CATALIZADOR**: Earnings, eventos o noticias. Si hay earnings en < 30 días, marca con ⚠️
 - Tono: analítico, sin jerga innecesaria, sin frases vacías como "es importante considerar" o "en mi opinión"`
 }
