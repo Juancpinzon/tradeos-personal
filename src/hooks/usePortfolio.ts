@@ -26,9 +26,13 @@ export interface UsePortfolioReturn {
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 async function alpacaGet<T>(path: string): Promise<T> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  let { data: { session } } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    session = refreshed.session;
+  }
+
   if (!session?.access_token) {
     throw new Error("No hay sesión activa. Iniciá sesión nuevamente.");
   }
