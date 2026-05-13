@@ -39,6 +39,7 @@ async function alpacaGet<T>(path: string): Promise<T> {
     method: "GET",
     headers: {
       Authorization: `Bearer ${session.access_token}`,
+      "x-user-token": session.access_token,
       apikey: SUPABASE_ANON_KEY,
       "Content-Type": "application/json",
     },

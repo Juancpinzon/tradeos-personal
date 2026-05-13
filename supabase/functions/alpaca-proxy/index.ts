@@ -6,7 +6,7 @@ function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type",
+      "authorization, x-client-info, apikey, content-type, x-user-token",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   };
 }
@@ -28,7 +28,6 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabaseSvcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   const url = new URL(req.url);
@@ -40,44 +39,32 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({
       fn_running: true,
       supabase_url_set: !!supabaseUrl,
-      anon_key_set: !!supabaseAnonKey,
+
       service_role_set: !!supabaseSvcKey,
       alpaca_key_set: !!Deno.env.get("ALPACA_API_KEY"),
       sub_path: subPath,
     });
   }
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return errJson("Missing authorization header", 401);
-  }
+  // ── Auth (manual JWT decode) ──────────────────────────────────────────────
+  const authHeader =
+    req.headers.get("Authorization") ??
+    ("Bearer " + (req.headers.get("x-user-token") ?? ""));
+  if (!authHeader || authHeader === "Bearer ") return errJson("Missing authorization header", 401);
 
-  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const token = authHeader.replace("Bearer ", "");
-  const {
-    data: { user },
-    error: authError,
-  } = await userClient.auth.getUser(token);
-
-  if (authError || !user) {
-    console.error("Auth error:", authError?.message ?? "no user");
-    return errJson("Unauthorized", 401);
-  }
-
-  const userId = user.id;
-  console.log("Authenticated user:", userId.substring(0, 8));
-
-  // ── GET /debug-auth ───────────────────────────────────────────────────────
-  if (req.method === "GET" && subPath === "/debug-auth") {
-    return jsonResponse({
-      user_id: userId,
-      user_email: user.email,
-      auth_error: null,
-    });
+  let userId: string;
+  try {
+    const token = authHeader.slice(7);
+    const parts = token.split(".");
+    if (parts.length !== 3) throw new Error("invalid jwt");
+    const raw = parts[1];
+    const padded = raw.replace(/-/g, "+").replace(/_/g, "/") + "====".slice((4 - raw.length % 4) % 4);
+    const payload = JSON.parse(atob(padded));
+    if (!payload.sub) throw new Error("no sub");
+    userId = payload.sub as string;
+    console.log("userId:", userId.substring(0, 8));
+  } catch (e) {
+    return errJson("Invalid token: " + String(e), 401);
   }
 
   const adminClient = createClient(supabaseUrl, supabaseSvcKey);
