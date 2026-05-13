@@ -1,118 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // src/pages/History.tsx — Historial de órdenes + Earnings calendar
-// Datos mock — sin llamadas reales (Fase 6 visual)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useMemo } from 'react'
-import { History as HistoryIcon, Calendar, ChevronUp, ChevronDown, Search } from 'lucide-react'
-import type { Order, EarningsEvent } from '../types'
+import { History as HistoryIcon, Calendar, ChevronUp, ChevronDown, Search, Loader2 } from 'lucide-react'
+import { useOrders } from '../hooks/useOrders'
+import type { Order } from '../types'
 import { formatCurrency } from '../lib/formatters'
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Mock data
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MOCK_ORDERS: (Order & { risk_amount?: number; imported?: boolean })[] = [
-  {
-    id: 'o1', user_id: 'u', broker_order_id: 'alp-001', broker: 'alpaca',
-    symbol: 'AAPL', side: 'buy', order_type: 'market', qty: 45,
-    filled_qty: 45, filled_avg_price: 182.43,
-    status: 'filled', asset_class: 'equity',
-    portfolio_weight_at_order: 6.5, risk_amount: 2508,
-    submitted_at: '2026-05-05T09:32:00Z', filled_at: '2026-05-05T09:32:04Z',
-  },
-  {
-    id: 'o2', user_id: 'u', broker_order_id: 'alp-002', broker: 'alpaca',
-    symbol: 'NVDA', side: 'buy', order_type: 'market', qty: 15,
-    filled_qty: 15, filled_avg_price: 949.20,
-    status: 'filled', asset_class: 'equity',
-    portfolio_weight_at_order: 11.4, risk_amount: 3800,
-    submitted_at: '2026-05-03T10:15:00Z', filled_at: '2026-05-03T10:15:02Z',
-  },
-  {
-    id: 'o3', user_id: 'u', broker_order_id: 'alp-003', broker: 'alpaca',
-    symbol: 'TSLA', side: 'sell', order_type: 'limit', qty: 5,
-    limit_price: 179.00, filled_qty: 5, filled_avg_price: 178.90,
-    status: 'filled', asset_class: 'equity',
-    portfolio_weight_at_order: 1.4, risk_amount: undefined,
-    submitted_at: '2026-05-02T14:45:00Z', filled_at: '2026-05-02T14:52:10Z',
-  },
-  {
-    id: 'o4', user_id: 'u', broker_order_id: 'alp-004', broker: 'alpaca',
-    symbol: 'MSFT', side: 'buy', order_type: 'market', qty: 20,
-    filled_qty: 20, filled_avg_price: 415.30,
-    status: 'filled', asset_class: 'equity',
-    portfolio_weight_at_order: 6.6, risk_amount: 1890,
-    submitted_at: '2026-04-28T09:45:00Z', filled_at: '2026-04-28T09:45:01Z',
-  },
-  {
-    id: 'o5', user_id: 'u', broker_order_id: 'bnb-001', broker: 'binance',
-    symbol: 'BTC', side: 'buy', order_type: 'market', qty: 0.25,
-    filled_qty: 0.25, filled_avg_price: 62480,
-    status: 'filled', asset_class: 'crypto',
-    portfolio_weight_at_order: 12.5, risk_amount: 625,
-    submitted_at: '2026-04-25T15:00:00Z', filled_at: '2026-04-25T15:00:00Z',
-  },
-  {
-    id: 'o6', user_id: 'u', broker_order_id: 'alp-005', broker: 'alpaca',
-    symbol: 'SPY', side: 'buy', order_type: 'market', qty: 30,
-    filled_qty: 30, filled_avg_price: 528.60,
-    status: 'filled', asset_class: 'equity',
-    portfolio_weight_at_order: 12.7, risk_amount: 3150,
-    submitted_at: '2026-04-20T09:31:00Z', filled_at: '2026-04-20T09:31:01Z',
-  },
-  {
-    id: 'o7', user_id: 'u', broker_order_id: 'alp-006', broker: 'alpaca',
-    symbol: 'AAPL', side: 'sell', order_type: 'stop', qty: 10,
-    stop_price: 177.00,
-    status: 'cancelled', asset_class: 'equity',
-    submitted_at: '2026-04-15T10:00:00Z',
-  },
-  {
-    id: 'o8', user_id: 'u', broker_order_id: 'bnb-002', broker: 'binance',
-    symbol: 'ETH', side: 'buy', order_type: 'limit', qty: 2,
-    limit_price: 3100,
-    status: 'pending', asset_class: 'crypto',
-    risk_amount: undefined,
-    submitted_at: '2026-04-10T11:30:00Z',
-  },
-]
-
-interface EarningsEventEx extends EarningsEvent {
-  company: string
-  daysUntil: number // negative = past
-}
-
-const MOCK_EARNINGS: EarningsEventEx[] = [
-  {
-    symbol: 'AAPL', company: 'Apple Inc.',
-    report_date: '2026-05-09', report_time: 'before_market',
-    eps_estimate: 1.58, eps_actual: undefined,
-    fetched_at: '2026-05-06T00:00:00Z',
-    daysUntil: 3,
-  },
-  {
-    symbol: 'MSFT', company: 'Microsoft Corp.',
-    report_date: '2026-05-20', report_time: 'after_market',
-    eps_estimate: 3.22, eps_actual: undefined,
-    fetched_at: '2026-05-06T00:00:00Z',
-    daysUntil: 14,
-  },
-  {
-    symbol: 'NVDA', company: 'NVIDIA Corp.',
-    report_date: '2026-05-28', report_time: 'after_market',
-    eps_estimate: 5.84, eps_actual: undefined,
-    fetched_at: '2026-05-06T00:00:00Z',
-    daysUntil: 22,
-  },
-  {
-    symbol: 'TSLA', company: 'Tesla, Inc.',
-    report_date: '2026-04-22', report_time: 'after_market',
-    eps_estimate: 0.48, eps_actual: 0.41, surprise_pct: -14.6,
-    fetched_at: '2026-05-06T00:00:00Z',
-    daysUntil: -14,
-  },
-]
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -131,17 +25,6 @@ function getOrderValue(o: Order): number | null {
   const price = o.filled_avg_price ?? o.limit_price ?? o.stop_price
   if (!price) return null
   return o.qty * price
-}
-
-function formatReportTime(rt: 'before_market' | 'after_market' | 'unknown'): string {
-  if (rt === 'before_market') return 'Pre-market'
-  if (rt === 'after_market')  return 'Post-market'
-  return 'Horario desconocido'
-}
-
-function formatEarningsDate(dateStr: string): string {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -203,139 +86,6 @@ function SideBadge({ side }: { side: 'buy' | 'sell' }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EarningsCard
-// ─────────────────────────────────────────────────────────────────────────────
-
-function EarningsCard({ e }: { e: EarningsEventEx }) {
-  const isPast     = e.daysUntil < 0
-  const isImminent = !isPast && e.daysUntil <= 7
-  const isSoon     = !isPast && e.daysUntil > 7 && e.daysUntil <= 14
-
-  return (
-    <div style={{
-      minWidth:        '200px',
-      maxWidth:        '220px',
-      backgroundColor: 'var(--bg-surface)',
-      border:          isImminent
-        ? '1px solid rgba(245,158,11,0.4)'
-        : '1px solid var(--border-default)',
-      borderRadius:    '0.625rem',
-      padding:         '1rem',
-      display:         'flex',
-      flexDirection:   'column',
-      gap:             '0.625rem',
-      flexShrink:      0,
-    }}>
-      {/* Symbol + status badge */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
-        <span className="font-mono" style={{
-          fontSize:   '1rem',
-          fontWeight: 700,
-          color:      'var(--text-primary)',
-        }}>
-          {e.symbol}
-        </span>
-        {isPast ? (
-          <span style={{
-            padding:         '0.175rem 0.5rem',
-            borderRadius:    '0.25rem',
-            backgroundColor: 'var(--bg-elevated)',
-            border:          '1px solid var(--border-default)',
-            fontSize:        '0.625rem',
-            fontWeight:      600,
-            color:           'var(--text-muted)',
-            fontFamily:      '"Syne", sans-serif',
-            whiteSpace:      'nowrap',
-          }}>
-            Reportado
-          </span>
-        ) : isImminent ? (
-          <span style={{
-            padding:         '0.175rem 0.5rem',
-            borderRadius:    '0.25rem',
-            backgroundColor: 'rgba(245,158,11,0.12)',
-            border:          '1px solid rgba(245,158,11,0.35)',
-            fontSize:        '0.625rem',
-            fontWeight:      700,
-            color:           '#f59e0b',
-            fontFamily:      '"Syne", sans-serif',
-            whiteSpace:      'nowrap',
-          }}>
-            ⚠ {e.daysUntil}d
-          </span>
-        ) : isSoon ? (
-          <span style={{
-            padding:         '0.175rem 0.5rem',
-            borderRadius:    '0.25rem',
-            backgroundColor: 'rgba(59,130,246,0.1)',
-            border:          '1px solid rgba(59,130,246,0.25)',
-            fontSize:        '0.625rem',
-            fontWeight:      600,
-            color:           '#3b82f6',
-            fontFamily:      '"Syne", sans-serif',
-            whiteSpace:      'nowrap',
-          }}>
-            {e.daysUntil}d
-          </span>
-        ) : null}
-      </div>
-
-      {/* Company */}
-      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.3 }}>
-        {e.company}
-      </p>
-
-      {/* Date + time */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-        <Calendar size={12} strokeWidth={1.75} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-          {formatEarningsDate(e.report_date)} · {formatReportTime(e.report_time)}
-        </span>
-      </div>
-
-      {/* EPS row */}
-      <div style={{
-        borderTop:   '1px solid var(--border-subtle)',
-        paddingTop:  '0.5rem',
-        display:     'flex',
-        flexDirection:'column',
-        gap:         '0.3rem',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>EPS Est.</span>
-          <span className="font-mono" style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-            ${e.eps_estimate?.toFixed(2) ?? '—'}
-          </span>
-        </div>
-
-        {e.eps_actual != null && (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>EPS Real</span>
-              <span className="font-mono" style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                ${e.eps_actual.toFixed(2)}
-              </span>
-            </div>
-            {e.surprise_pct != null && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Sorpresa</span>
-                <span className="font-mono" style={{
-                  fontSize:   '0.8125rem',
-                  fontWeight: 700,
-                  color:      e.surprise_pct >= 0 ? '#10b981' : '#ef4444',
-                }}>
-                  {e.surprise_pct > 0 ? '+' : ''}{e.surprise_pct.toFixed(1)}%
-                </span>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // SortableHeader
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -384,6 +134,8 @@ function SortableHeader({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function History() {
+  const { orders, isLoading } = useOrders()
+
   // Filters
   const [search,     setSearch]     = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
@@ -405,7 +157,7 @@ export default function History() {
   }
 
   const filtered = useMemo(() => {
-    let list = [...MOCK_ORDERS]
+    let list = [...orders]
 
     if (search.trim()) {
       const q = search.trim().toUpperCase()
@@ -497,8 +249,9 @@ export default function History() {
             color:           'var(--text-muted)',
             fontFamily:      '"Syne", sans-serif',
           }}>
-            {MOCK_ORDERS.length} órdenes
+            {orders.length} órdenes
           </span>
+          {isLoading && <Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-muted)' }} />}
         </div>
 
         {/* Filter row */}
@@ -594,7 +347,7 @@ export default function History() {
                         fontSize:   '0.875rem',
                       }}
                     >
-                      Sin órdenes para los filtros seleccionados
+                      Sin órdenes registradas.
                     </td>
                   </tr>
                 ) : filtered.map(order => {
@@ -715,33 +468,32 @@ export default function History() {
 
       {/* ─── EARNINGS ─── */}
       <section>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-            <Calendar size={18} strokeWidth={1.75} style={{ color: 'var(--color-primary)' }} />
-            <h2 style={{
-              fontFamily: '"Syne", sans-serif',
-              fontWeight: 700,
-              fontSize:   '1.125rem',
-              color:      'var(--text-primary)',
-              margin:     0,
-            }}>
-              Próximos Earnings
-            </h2>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '1rem' }}>
+          <Calendar size={18} strokeWidth={1.75} style={{ color: 'var(--color-primary)' }} />
+          <h2 style={{
+            fontFamily: '"Syne", sans-serif',
+            fontWeight: 700,
+            fontSize:   '1.125rem',
+            color:      'var(--text-primary)',
+            margin:     0,
+          }}>
+            Próximos Earnings
+          </h2>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', margin: 0 }}>
             Posiciones y watchlist — próximos 30 días
           </p>
         </div>
 
         <div style={{
-          display:   'flex',
-          gap:       '0.875rem',
-          overflowX: 'auto',
-          paddingBottom: '0.5rem',
+          padding:         '2rem',
+          backgroundColor: 'var(--bg-surface)',
+          border:          '1px solid var(--border-default)',
+          borderRadius:    '0.625rem',
+          textAlign:       'center',
+          color:           'var(--text-muted)',
+          fontSize:        '0.875rem',
         }}>
-          {MOCK_EARNINGS.map(e => (
-            <EarningsCard key={`${e.symbol}-${e.report_date}`} e={e} />
-          ))}
+          Sin eventos de earnings próximos. Conectá FMP en Settings para activar el calendario.
         </div>
       </section>
 

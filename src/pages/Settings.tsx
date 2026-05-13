@@ -25,6 +25,7 @@ import {
 import { formatCurrency } from '../lib/formatters'
 import ImporterModal from '../components/importer/ImporterModal'
 import { supabase } from '../lib/supabase'
+import { usePortfolio } from '../hooks/usePortfolio'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos locales
@@ -41,12 +42,6 @@ interface ApiKeyState {
   status:  ConnectionStatus
   loading: boolean
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Constantes mock
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MOCK_PORTFOLIO_EQUITY = 125_430
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-componentes
@@ -519,11 +514,14 @@ function LiveConfirmModal({ onConfirm, onCancel }: { onConfirm: () => void; onCa
 const INITIAL_API: ApiKeyState = { apiKey: '', secret: '', showKey: false, showSecret: false, status: 'unconfigured', loading: false }
 
 export default function Settings() {
+  const { account } = usePortfolio()
+  const equity = account?.equity ?? 0
+
   // Section A: API Keys
-  const [alpaca,    setAlpaca]    = useState<ApiKeyState>({ ...INITIAL_API, status: 'connected' })
+  const [alpaca,    setAlpaca]    = useState<ApiKeyState>({ ...INITIAL_API })
   const [binance,   setBinance]   = useState<ApiKeyState>({ ...INITIAL_API })
-  const [anthropic, setAnthropic] = useState<ApiKeyState>({ ...INITIAL_API, status: 'connected' })
-  const [fmp,       setFmp]       = useState<ApiKeyState>({ ...INITIAL_API, status: 'connected' })
+  const [anthropic, setAnthropic] = useState<ApiKeyState>({ ...INITIAL_API })
+  const [fmp,       setFmp]       = useState<ApiKeyState>({ ...INITIAL_API })
 
   // Section B: Risk Management
   const [riskPct,    setRiskPct]    = useState(2)
@@ -575,8 +573,8 @@ export default function Settings() {
   }
 
   // Computed
-  const riskAmount   = (riskPct / 100) * MOCK_PORTFOLIO_EQUITY
-  const maxPosAmount = (maxPosPct / 100) * MOCK_PORTFOLIO_EQUITY
+  const riskAmount   = (riskPct / 100) * equity
+  const maxPosAmount = (maxPosPct / 100) * equity
 
   return (
     <>
@@ -660,7 +658,7 @@ export default function Settings() {
           <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1.5rem' }}>
             <SectionHeader
               title="Gestión de Riesgo"
-              subtitle={`Portafolio de referencia: ${formatCurrency(MOCK_PORTFOLIO_EQUITY, 0)}`}
+              subtitle={`Portafolio de referencia: ${formatCurrency(equity, 0)}`}
               icon={AlertTriangle}
             />
             <div style={{
@@ -828,7 +826,7 @@ export default function Settings() {
             {/* Save row */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
-                Última actualización: 06 May 2026, 09:41 AM
+                Última actualización: {new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
               </p>
               <button
                 onClick={handleSave}
