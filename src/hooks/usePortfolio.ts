@@ -42,6 +42,7 @@ async function alpacaGet<T>(path: string): Promise<T> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/alpaca-proxy${path}`, {
     method: "GET",
     headers: {
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       "x-user-token": session.access_token,
       apikey: SUPABASE_ANON_KEY,
       "Content-Type": "application/json",
@@ -96,7 +97,7 @@ export function usePortfolio(): UsePortfolioReturn {
     queryFn: fetchAccount,
     staleTime: 30_000,
     refetchInterval: 60_000,
-    retry: 1,
+    retry: false,
   });
 
   const positionsQuery = useQuery({
@@ -104,7 +105,7 @@ export function usePortfolio(): UsePortfolioReturn {
     queryFn: fetchPositions,
     staleTime: 30_000,
     refetchInterval: 60_000,
-    retry: 1,
+    retry: false,
   });
 
   const snapshotsQuery = useQuery({
