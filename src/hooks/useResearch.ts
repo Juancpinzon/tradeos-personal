@@ -22,6 +22,7 @@ interface UseResearchReturn {
   currentSymbol: string | null
   history: ResearchEntry[]
   loadHistoryEntry: (entry: ResearchEntry) => void
+  reset: () => void
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
