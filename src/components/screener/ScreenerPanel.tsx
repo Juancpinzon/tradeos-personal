@@ -15,12 +15,6 @@ import ScreenerResultsTable from './ScreenerResultsTable'
 
 const MOCK_PRESETS: ScreenerPreset[] = []
 
-const addDays = (n: number): string => {
-  const d = new Date()
-  d.setDate(d.getDate() + n)
-  return d.toISOString().split('T')[0] as string
-}
-
 const MOCK_RESULTS: ScreenerResultItem[] = []
 const MOCK_AI_SUMMARY = ''
 

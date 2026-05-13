@@ -7,8 +7,17 @@ function corsHeaders() {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-user-token",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   };
+}
+
+function mapAlpacaStatus(s: string): string {
+  if (s === "filled") return "filled";
+  if (["canceled", "expired", "replaced"].includes(s)) return "cancelled";
+  if (["rejected", "stopped", "suspended"].includes(s)) return "rejected";
+  if (s === "partially_filled") return "partially_filled";
+  if (["new", "accepted", "pending_new", "accepted_for_bidding"].includes(s)) return "accepted";
+  return "pending";
 }
 
 function jsonResponse(data: unknown, status = 200) {
@@ -177,11 +186,40 @@ Deno.serve(async (req: Request) => {
       const status = url.searchParams.get("status") ?? "all";
       const limit = url.searchParams.get("limit") ?? "50";
       const res = await fetch(
-        `${baseUrl}/v2/orders?status=${status}&limit=${limit}`,
+        `${baseUrl}/v2/orders?status=${status}&limit=${limit}&direction=desc`,
         { headers: alpacaHeaders },
       );
       const data = await res.json();
       if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
+      return jsonResponse(data);
+    }
+
+    // ── GET /orders/:id ───────────────────────────────────────────────────
+    if (req.method === "GET" && subPath.startsWith("/orders/")) {
+      const brokerOrderId = subPath.slice("/orders/".length);
+      if (!brokerOrderId) return errJson("Order ID requerido");
+
+      const res = await fetch(`${baseUrl}/v2/orders/${brokerOrderId}`, {
+        headers: alpacaHeaders,
+      });
+      const data = await res.json();
+      if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
+
+      // Sync status + fill data to our DB
+      const mappedStatus = mapAlpacaStatus(data.status ?? "");
+      await adminClient
+        .from("orders")
+        .update({
+          status: mappedStatus,
+          filled_qty: data.filled_qty ? parseFloat(data.filled_qty) : null,
+          filled_avg_price: data.filled_avg_price
+            ? parseFloat(data.filled_avg_price)
+            : null,
+          filled_at: data.filled_at ?? null,
+        })
+        .eq("broker_order_id", brokerOrderId)
+        .eq("user_id", userId);
+
       return jsonResponse(data);
     }
 
@@ -194,7 +232,19 @@ Deno.serve(async (req: Request) => {
         return errJson("Invalid JSON body");
       }
 
-      const { symbol, side, order_type, qty, limit_price, stop_price } = body;
+      const {
+        symbol,
+        side,
+        order_type,
+        qty,
+        limit_price,
+        stop_price,
+        risk_amount,
+        portfolio_weight_at_order,
+        stop_loss_price,
+        target_price,
+        risk_reward_ratio,
+      } = body;
       if (!symbol) return errJson("symbol requerido");
       if (!side || !["buy", "sell"].includes(side))
         return errJson("side inválido");
@@ -240,10 +290,15 @@ Deno.serve(async (req: Request) => {
           qty,
           limit_price: limit_price ?? null,
           stop_price: stop_price ?? null,
-          status: alpacaOrder.status ?? "pending",
+          status: mapAlpacaStatus(alpacaOrder.status ?? ""),
           asset_class:
             alpacaOrder.asset_class === "crypto" ? "crypto" : "equity",
           submitted_at: alpacaOrder.submitted_at ?? new Date().toISOString(),
+          risk_amount: risk_amount ?? null,
+          portfolio_weight_at_order: portfolio_weight_at_order ?? null,
+          stop_loss_price: stop_loss_price ?? null,
+          target_price: target_price ?? null,
+          risk_reward_ratio: risk_reward_ratio ?? null,
         })
         .select()
         .single();
@@ -253,6 +308,34 @@ Deno.serve(async (req: Request) => {
         { order: savedOrder, alpaca_order: alpacaOrder },
         201,
       );
+    }
+
+    // ── DELETE /orders/:id ────────────────────────────────────────────────
+    if (req.method === "DELETE" && subPath.startsWith("/orders/")) {
+      const brokerOrderId = subPath.slice("/orders/".length);
+      if (!brokerOrderId) return errJson("Order ID requerido");
+
+      const alpacaRes = await fetch(`${baseUrl}/v2/orders/${brokerOrderId}`, {
+        method: "DELETE",
+        headers: alpacaHeaders,
+      });
+
+      if (!alpacaRes.ok) {
+        const data = await alpacaRes.json().catch(() => ({}));
+        return errJson(
+          (data as { message?: string })?.message ??
+            `Alpaca error ${alpacaRes.status}`,
+          alpacaRes.status,
+        );
+      }
+
+      await adminClient
+        .from("orders")
+        .update({ status: "cancelled" })
+        .eq("broker_order_id", brokerOrderId)
+        .eq("user_id", userId);
+
+      return jsonResponse({ cancelled: true });
     }
 
     return errJson("Not found", 404);
@@ -281,4 +364,9 @@ interface OrderSubmit {
   qty: number;
   limit_price?: number;
   stop_price?: number;
+  risk_amount?: number;
+  portfolio_weight_at_order?: number;
+  stop_loss_price?: number;
+  target_price?: number;
+  risk_reward_ratio?: number;
 }

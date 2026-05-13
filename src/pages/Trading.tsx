@@ -105,7 +105,7 @@ export default function Trading() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [lastConfirmed, setLastConfirmed] = useState<string | null>(null)
 
-  const { orders, isLoading: ordersLoading, submitOrder } = useOrders()
+  const { orders, isLoading: ordersLoading, submitOrder, isSubmitting } = useOrders()
   const { account, positions } = usePortfolio()
 
   // Precio actual del símbolo seleccionado (desde watchlist mock)
@@ -152,10 +152,19 @@ export default function Trading() {
         if (reward > 0) rrRatio = reward / stopDist
       }
 
-      await submitOrder.mutateAsync({
-        ...pendingDraft,
+      await submitOrder({
+        symbol:                   pendingDraft.symbol,
+        side:                     pendingDraft.side,
+        order_type:               pendingDraft.order_type,
+        qty:                      pendingDraft.qty,
+        limit_price:              pendingDraft.limit_price ?? undefined,
+        stop_price:               (pendingDraft.order_type === 'stop' || pendingDraft.order_type === 'stop_limit')
+                                    ? (pendingDraft.stop_loss ?? undefined)
+                                    : undefined,
         risk_amount:              riskAmount,
         portfolio_weight_at_order: portfolioWeightAtOrder ?? undefined,
+        stop_loss_price:          pendingDraft.stop_loss ?? undefined,
+        target_price:             pendingDraft.target ?? undefined,
         risk_reward_ratio:        rrRatio,
       })
 
@@ -286,7 +295,7 @@ export default function Trading() {
           totalEquity={account?.equity ?? 0}
           portfolioWeightAtOrder={portfolioWeightAtOrder}
           userSettings={DEFAULT_SETTINGS}
-          isSubmitting={submitOrder.isPending}
+          isSubmitting={isSubmitting}
           onConfirm={handleConfirmOrder}
           onCancel={handleCancelModal}
         />
