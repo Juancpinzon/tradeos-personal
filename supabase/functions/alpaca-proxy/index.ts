@@ -35,13 +35,15 @@ Deno.serve(async (req: Request) => {
   const pathParts = url.pathname.split("/alpaca-proxy");
   const subPath = pathParts[1] ?? "/";
 
-  // ── GET /debug — sin auth ─────────────────────────────────────────────────
   if (req.method === "GET" && subPath === "/debug") {
     return jsonResponse({
       fn_running: true,
       supabase_url_set: !!supabaseUrl,
       anon_key_set: !!supabaseAnonKey,
       alpaca_key_set: !!Deno.env.get("ALPACA_API_KEY"),
+      full_path: url.pathname,
+      sub_path: subPath,
+      path_parts: pathParts,
     });
   }
 
