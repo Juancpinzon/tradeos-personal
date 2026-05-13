@@ -42,10 +42,10 @@ async function alpacaGet<T>(path: string): Promise<T> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/alpaca-proxy${path}`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      "x-user-token": session.access_token,
-      apikey: SUPABASE_ANON_KEY,
-      "Content-Type": "application/json",
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'x-user-token': session.access_token,
+      'apikey': SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
     },
   });
 
