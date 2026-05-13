@@ -28,6 +28,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabaseSvcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   const url = new URL(req.url);
@@ -36,41 +37,43 @@ Deno.serve(async (req: Request) => {
 
   // ── GET /debug — sin auth ─────────────────────────────────────────────────
   if (req.method === "GET" && subPath === "/debug") {
-    return jsonResponse({ fn_running: true, supabase_url_set: !!supabaseUrl });
+    return jsonResponse({
+      fn_running: true,
+      supabase_url_set: !!supabaseUrl,
+      anon_key_set: !!supabaseAnonKey,
+      alpaca_key_set: !!Deno.env.get("ALPACA_API_KEY"),
+    });
   }
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
+  // ── Auth — patrón estándar Supabase ──────────────────────────────────────
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return errJson("No auth header", 401);
+  if (!authHeader) {
+    return errJson("Missing authorization header", 401);
   }
 
-  // Extraer userId del JWT sin verificar firma (Supabase valida en service role)
-  let userId: string;
-  try {
-    const token = authHeader.slice(7);
-    const parts = token.split(".");
-    if (parts.length !== 3) throw new Error("invalid jwt");
-    const raw = parts[1];
-    const padded =
-      raw.replace(/-/g, "+").replace(/_/g, "/") +
-      "====".slice(raw.length % 4 || 4);
-    const payload = JSON.parse(
-      new TextDecoder().decode(
-        Uint8Array.from(atob(padded), (c) => c.charCodeAt(0)),
-      ),
-    );
-    if (!payload.sub) throw new Error("no sub in token");
-    userId = payload.sub as string;
-  } catch (e) {
-    return errJson("Invalid token: " + String(e), 401);
+  // Cliente con el JWT del usuario — Supabase valida la firma
+  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const {
+    data: { user },
+    error: authError,
+  } = await userClient.auth.getUser();
+
+  if (authError || !user) {
+    console.error("Auth error:", authError?.message ?? "no user");
+    return errJson("Unauthorized", 401);
   }
 
-  // ── Supabase client con service role ──────────────────────────────────────
-  const supabase = createClient(supabaseUrl, supabaseSvcKey);
+  const userId = user.id;
+  console.log("Authenticated user:", userId.substring(0, 8));
 
-  // ── Leer user_settings (solo columnas que existen en la migration) ─────────
-  const { data: settings } = await supabase
+  // Cliente admin para operaciones de DB (bypasea RLS)
+  const adminClient = createClient(supabaseUrl, supabaseSvcKey);
+
+  // ── Leer user_settings ────────────────────────────────────────────────────
+  const { data: settings } = await adminClient
     .from("user_settings")
     .select("alpaca_mode, risk_per_trade_pct")
     .eq("id", userId)
@@ -78,7 +81,7 @@ Deno.serve(async (req: Request) => {
 
   const alpacaMode = settings?.alpaca_mode ?? "paper";
 
-  // ── Keys de Alpaca desde Secrets ──────────────────────────────────────────
+  // ── Keys de Alpaca ────────────────────────────────────────────────────────
   const alpacaKey = Deno.env.get("ALPACA_API_KEY");
   const alpacaSecret = Deno.env.get("ALPACA_SECRET_KEY");
 
@@ -86,7 +89,6 @@ Deno.serve(async (req: Request) => {
     return errJson("Alpaca API keys not configured. Go to Settings.", 503);
   }
 
-  // Fase 1: siempre paper
   const baseUrl = "https://paper-api.alpaca.markets";
 
   const alpacaHeaders = {
@@ -110,7 +112,7 @@ Deno.serve(async (req: Request) => {
       const lastEquity = parseFloat(data.last_equity ?? data.equity ?? "0");
       const pnlToday = equity - lastEquity;
 
-      await supabase.from("equity_snapshots").insert({
+      await adminClient.from("equity_snapshots").insert({
         user_id: userId,
         broker: "alpaca",
         equity,
@@ -159,14 +161,13 @@ Deno.serve(async (req: Request) => {
         broker: "alpaca",
       }));
 
-      // Upsert en Supabase
-      await supabase
+      await adminClient
         .from("positions")
         .delete()
         .eq("user_id", userId)
         .eq("broker", "alpaca");
       if (positions.length > 0) {
-        await supabase
+        await adminClient
           .from("positions")
           .insert(positions.map((p) => ({ ...p, user_id: userId })));
       }
@@ -180,9 +181,7 @@ Deno.serve(async (req: Request) => {
       const limit = url.searchParams.get("limit") ?? "50";
       const res = await fetch(
         `${baseUrl}/v2/orders?status=${status}&limit=${limit}`,
-        {
-          headers: alpacaHeaders,
-        },
+        { headers: alpacaHeaders },
       );
       const data = await res.json();
       if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
@@ -239,7 +238,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: savedOrder, error: dbError } = await supabase
+      const { data: savedOrder, error: dbError } = await adminClient
         .from("orders")
         .insert({
           user_id: userId,
