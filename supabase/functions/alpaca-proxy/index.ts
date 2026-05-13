@@ -35,76 +35,33 @@ Deno.serve(async (req: Request) => {
   const pathParts = url.pathname.split("/alpaca-proxy");
   const subPath = pathParts[1] ?? "/";
 
-  if (req.method === "GET" && subPath === "/account") {
-    console.log("Reached /account handler, userId:", userId.substring(0, 8));
-    const res = await fetch(`${baseUrl}/v2/account`, {
-      headers: alpacaHeaders,
-    });
-    console.log("Alpaca response status:", res.status);
-    const data = await res.json();
-    console.log("Alpaca data keys:", Object.keys(data));
-    if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
-
-    const equity = parseFloat(data.equity ?? data.portfolio_value ?? "0");
-    const cash = parseFloat(data.cash ?? "0");
-    const buyingPower = parseFloat(data.buying_power ?? "0");
-    const lastEquity = parseFloat(data.last_equity ?? data.equity ?? "0");
-    const pnlToday = equity - lastEquity;
-
-    await adminClient.from("equity_snapshots").insert({
-      user_id: userId,
-      broker: "alpaca",
-      equity,
-      cash,
-      buying_power: buyingPower,
-    });
-
+  // ── GET /debug — sin auth ─────────────────────────────────────────────────
+  if (req.method === "GET" && subPath === "/debug") {
     return jsonResponse({
-      equity,
-      cash,
-      buying_power: buyingPower,
-      pnl_today: pnlToday,
-      pnl_today_pct: lastEquity > 0 ? (pnlToday / lastEquity) * 100 : 0,
-      mode: alpacaMode,
+      fn_running: true,
+      supabase_url_set: !!supabaseUrl,
+      anon_key_set: !!supabaseAnonKey,
+      service_role_set: !!supabaseSvcKey,
+      alpaca_key_set: !!Deno.env.get("ALPACA_API_KEY"),
+      sub_path: subPath,
     });
   }
 
-  // ── GET /debug-auth — muestra resultado de auth.getUser ──────────────────
-  if (req.method === "GET" && subPath === "/debug-auth") {
-    const ah = req.headers.get("Authorization") ?? "MISSING";
-    const userClient2 = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: ah } },
-    });
-    const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await userClient.auth.getUser(token);
-    return jsonResponse({
-      auth_header_present: ah !== "MISSING",
-      auth_header_prefix: ah.substring(0, 30),
-      user_id: u?.id ?? null,
-      user_email: u?.email ?? null,
-      auth_error: e?.message ?? null,
-      anon_key_prefix: supabaseAnonKey.substring(0, 20),
-    });
-  }
-
-  // ── Auth — patrón estándar Supabase ──────────────────────────────────────
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
     return errJson("Missing authorization header", 401);
   }
 
-  // Cliente con el JWT del usuario — Supabase valida la firma
   const userClient = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
   });
 
+  const token = authHeader.replace("Bearer ", "");
   const {
     data: { user },
     error: authError,
-  } = await userClient.auth.getUser();
+  } = await userClient.auth.getUser(token);
 
   if (authError || !user) {
     console.error("Auth error:", authError?.message ?? "no user");
@@ -114,10 +71,17 @@ Deno.serve(async (req: Request) => {
   const userId = user.id;
   console.log("Authenticated user:", userId.substring(0, 8));
 
-  // Cliente admin para operaciones de DB (bypasea RLS)
+  // ── GET /debug-auth ───────────────────────────────────────────────────────
+  if (req.method === "GET" && subPath === "/debug-auth") {
+    return jsonResponse({
+      user_id: userId,
+      user_email: user.email,
+      auth_error: null,
+    });
+  }
+
   const adminClient = createClient(supabaseUrl, supabaseSvcKey);
 
-  // ── Leer user_settings ────────────────────────────────────────────────────
   const { data: settings } = await adminClient
     .from("user_settings")
     .select("alpaca_mode, risk_per_trade_pct")
@@ -126,16 +90,14 @@ Deno.serve(async (req: Request) => {
 
   const alpacaMode = settings?.alpaca_mode ?? "paper";
 
-  // ── Keys de Alpaca ────────────────────────────────────────────────────────
   const alpacaKey = Deno.env.get("ALPACA_API_KEY");
   const alpacaSecret = Deno.env.get("ALPACA_SECRET_KEY");
 
   if (!alpacaKey || !alpacaSecret) {
-    return errJson("Alpaca API keys not configured. Go to Settings.", 503);
+    return errJson("Alpaca API keys not configured.", 503);
   }
 
   const baseUrl = "https://paper-api.alpaca.markets";
-
   const alpacaHeaders = {
     "APCA-API-KEY-ID": alpacaKey,
     "APCA-API-SECRET-KEY": alpacaSecret,
@@ -151,7 +113,7 @@ Deno.serve(async (req: Request) => {
       const data = await res.json();
       if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
 
-      const equity = parseFloat(data.equity ?? data.portfolio_value ?? "0");
+      const equity = parseFloat(data.equity ?? "0");
       const cash = parseFloat(data.cash ?? "0");
       const buyingPower = parseFloat(data.buying_power ?? "0");
       const lastEquity = parseFloat(data.last_equity ?? data.equity ?? "0");
@@ -243,7 +205,6 @@ Deno.serve(async (req: Request) => {
       }
 
       const { symbol, side, order_type, qty, limit_price, stop_price } = body;
-
       if (!symbol) return errJson("symbol requerido");
       if (!side || !["buy", "sell"].includes(side))
         return errJson("side inválido");
@@ -260,15 +221,10 @@ Deno.serve(async (req: Request) => {
       if (
         (order_type === "limit" || order_type === "stop_limit") &&
         limit_price
-      ) {
+      )
         alpacaPayload.limit_price = String(limit_price);
-      }
-      if (
-        (order_type === "stop" || order_type === "stop_limit") &&
-        stop_price
-      ) {
+      if ((order_type === "stop" || order_type === "stop_limit") && stop_price)
         alpacaPayload.stop_price = String(stop_price);
-      }
 
       const alpacaRes = await fetch(`${baseUrl}/v2/orders`, {
         method: "POST",
@@ -276,12 +232,11 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify(alpacaPayload),
       });
       const alpacaOrder = await alpacaRes.json();
-      if (!alpacaRes.ok) {
+      if (!alpacaRes.ok)
         return errJson(
           alpacaOrder?.message ?? `Alpaca error ${alpacaRes.status}`,
           alpacaRes.status,
         );
-      }
 
       const { data: savedOrder, error: dbError } = await adminClient
         .from("orders")
@@ -304,7 +259,6 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (dbError) console.error("DB insert error:", dbError);
-
       return jsonResponse(
         { order: savedOrder, alpaca_order: alpacaOrder },
         201,
