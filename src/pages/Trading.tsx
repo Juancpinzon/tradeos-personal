@@ -6,113 +6,49 @@
 // Símbolo seleccionado en watchlist → precarga en OrderForm
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { RefreshCw, TrendingUp, TrendingDown, Clock } from 'lucide-react'
 import OrderForm from '../components/trading/OrderForm'
 import ConfirmOrderModal from '../components/trading/ConfirmOrderModal'
 import OrderHistory from '../components/trading/OrderHistory'
+import { WatchlistPanel } from '../components/watchlist/WatchlistPanel'
 import { useOrders } from '../hooks/useOrders'
 import { usePortfolio } from '../hooks/usePortfolio'
+import { useWatchlist } from '../hooks/useWatchlist'
+import { useAuth } from '../hooks/useAuth'
 import { formatCurrency, formatPercent } from '../lib/formatters'
 import type { OrderDraft } from '../components/trading/OrderForm'
 import type { UserSettings } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Config de watchlist (mock: se reemplazará con useMarketData en Fase 3)
+// Trading page principal
 // ─────────────────────────────────────────────────────────────────────────────
-
-interface WatchItem {
-  symbol: string
-  price: number
-  change1d: number
-  inPortfolio: boolean
-  earningsDays?: number | null
-}
-
-const MOCK_WATCHLIST: WatchItem[] = []
-
-// Settings por defecto (se reemplazará con hook useSettings en Fase 6)
-const DEFAULT_SETTINGS: UserSettings = {
-  id:                  'loading',
-  alpaca_mode:         'paper',
-  live_trading_enabled: false,
-  default_broker:      'alpaca',
-  risk_per_trade_pct:   1,
-  max_position_size_pct: 10,
-  created_at:          new Date().toISOString(),
-  updated_at:          new Date().toISOString(),
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Watchlist row
-// ─────────────────────────────────────────────────────────────────────────────
-
-function WatchlistRow({
-  item,
-  isSelected,
-  onClick,
-}: {
-  item: WatchItem
-  isSelected: boolean
-  onClick: () => void
-}) {
-  const isPositive = item.change1d >= 0
-
-  return (
-    <div
-      className={`watchlist-row ${isSelected ? 'watchlist-row--selected' : ''}`}
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && onClick()}
-    >
-      <div className="watchlist-row__left">
-        <div className="watchlist-row__symbol">
-          {item.symbol}
-          {item.inPortfolio && (
-            <span className="watchlist-row__portfolio-dot" title="En portafolio" />
-          )}
-        </div>
-        {item.earningsDays !== null && item.earningsDays !== undefined && (
-          <span className="watchlist-row__earnings">
-            📅 {item.earningsDays}d
-          </span>
-        )}
-      </div>
-      <div className="watchlist-row__right">
-        <span className="watchlist-row__price font-mono">
-          {formatCurrency(item.price)}
-        </span>
-        <span
-          className="watchlist-row__change font-mono"
-          style={{ color: isPositive ? 'var(--color-profit)' : 'var(--color-loss)' }}
-        >
-          {isPositive ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-          {formatPercent(item.change1d)}
-        </span>
-      </div>
-    </div>
-  )
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trading page principal
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Trading() {
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('')
+  const [searchParams] = useSearchParams()
+  const selectedSymbol = searchParams.get('symbol') || ''
+  
   const [pendingDraft, setPendingDraft] = useState<OrderDraft | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [lastConfirmed, setLastConfirmed] = useState<string | null>(null)
 
   const { orders, isLoading: ordersLoading, submitOrder, isSubmitting, cancelOrder } = useOrders()
   const { account, positions } = usePortfolio()
+  const { items: watchlistItems } = useWatchlist()
 
-  // Precio actual del símbolo seleccionado (desde watchlist mock)
-  const selectedItem = MOCK_WATCHLIST.find(w => w.symbol === selectedSymbol) ?? null
-  const currentPrice = selectedItem?.price ?? null
+  // Precio actual del símbolo seleccionado
+  const selectedWatchItem = useMemo(() => 
+    watchlistItems.find(w => w.symbol === selectedSymbol),
+    [watchlistItems, selectedSymbol]
+  )
+  const currentPrice = selectedWatchItem?.marketData?.price ?? null
 
-  // Posición actual del símbolo para mostrar portfolio_weight_at_order en modal
+  // Posición actual del símbolo
   const currentPosition = positions.find(p => p.symbol === selectedSymbol)
   const portfolioWeightAtOrder = currentPosition?.portfolio_weight_pct ?? null
 
@@ -245,41 +181,14 @@ export default function Trading() {
       </div>
 
       {/* Columna derecha — Watchlist + Order history */}
-      <div className="trading-col trading-col--right">
-
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         {/* Watchlist */}
-        <div className="trading-watchlist">
-          <div className="trading-col__header">
-            <span className="trading-col__title">WATCHLIST</span>
-            <button
-              className="trading-col__refresh"
-              title="Actualizar precios (Fase 3)"
-              disabled
-            >
-              <RefreshCw size={12} />
-            </button>
-          </div>
-
-          <div className="watchlist-body">
-            {MOCK_WATCHLIST.map(item => (
-              <WatchlistRow
-                key={item.symbol}
-                item={item}
-                isSelected={selectedSymbol === item.symbol}
-                onClick={() => handleSelectSymbol(item.symbol)}
-              />
-            ))}
-          </div>
-
-          <div className="watchlist-footer">
-            <span className="font-mono" style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
-              ● Precios en tiempo real disponibles en Fase 3
-            </span>
-          </div>
+        <div style={{ height: '50%', borderBottom: '1px solid var(--border-default)' }}>
+          <WatchlistPanel />
         </div>
 
         {/* Order history */}
-        <div className="trading-history">
+        <div style={{ height: '50%', overflowY: 'auto' }}>
           <OrderHistory
             orders={orders}
             isLoading={ordersLoading}

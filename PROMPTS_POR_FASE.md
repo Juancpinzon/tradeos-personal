@@ -763,7 +763,7 @@ TAREA:
    Precios en tiempo real desde useWatchlist
 
 CRITERIO DE ÉXITO:
-✓ Wa
+✓
 
 ## FASE 8 — Importador de Historial desde Excel
 
