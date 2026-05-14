@@ -1,11 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // src/pages/Dashboard.tsx — Vista principal de portafolio
-// Alta densidad de información, diseño dark trading institucional
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePortfolio } from '../hooks/usePortfolio'
+import { useEarnings } from '../hooks/useEarnings'
 import EquityChart from '../components/portfolio/EquityChart'
 import PortfolioDoctor from '../components/portfolio/PortfolioDoctor'
 import PositionCard from '../components/portfolio/PositionCard'
@@ -25,23 +25,21 @@ function PortfolioSummary({
   buying_power,
   pnl_today,
   pnl_today_pct,
+  alpacaEquity,
+  binanceEquity,
   isSyncing,
 }: {
-  equity:       number
-  cash:         number
-  buying_power: number
-  pnl_today:    number
-  pnl_today_pct: number
-  isSyncing:    boolean
-  broker:       string
-  binanceEquity?: number
+  equity:         number
+  cash:           number
+  buying_power:   number
+  pnl_today:      number
+  pnl_today_pct:  number
+  alpacaEquity:   number
+  binanceEquity:  number
+  isSyncing:      boolean
 }) {
-  const navigate = useNavigate()
   const pnlColor    = pnl_today >= 0 ? '#10b981' : '#ef4444'
   const pnlPositive = pnl_today >= 0
-
-  const isUnified = broker === 'total'
-  const alpacaEquity = isUnified ? equity - (binanceEquity ?? 0) : equity
 
   return (
     <div
@@ -131,53 +129,27 @@ function PortfolioSummary({
           </span>
 
           {/* Binance badge */}
-          {isUnified ? (
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                padding: '0.25rem 0.625rem',
-                borderRadius: '0.25rem',
-                fontSize: '0.75rem',
-                fontWeight: 500,
-                backgroundColor: 'rgba(234, 179, 8, 0.1)',
-                border: '1px solid rgba(234, 179, 8, 0.2)',
-                color: '#eab308',
-              }}
-            >
-              <span style={{ fontSize: '0.6875rem', opacity: 0.7 }}>Binance</span>
-              <span className="font-mono">{formatCurrency(binanceEquity ?? 0)}</span>
-            </span>
-          ) : (
-            <button
-              onClick={() => navigate('/settings')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                padding: '0.25rem 0.625rem',
-                borderRadius: '0.25rem',
-                fontSize: '0.75rem',
-                fontWeight: 500,
-                backgroundColor: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                transition: 'all 150ms'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.borderColor = 'rgba(234, 179, 8, 0.4)'
-                e.currentTarget.style.color = 'var(--text-secondary)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.borderColor = 'var(--border-subtle)'
-                e.currentTarget.style.color = 'var(--text-muted)'
-              }}
-            >
-              <span style={{ fontSize: '0.6875rem' }}>+ Conectar Binance</span>
-            </button>
-          )}
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.375rem',
+              padding: '0.25rem 0.625rem',
+              borderRadius: '0.25rem',
+              fontSize: '0.75rem',
+              fontWeight: 500,
+              backgroundColor: binanceEquity > 0
+                ? 'rgba(234, 179, 8, 0.1)'
+                : 'var(--bg-elevated)',
+              border: binanceEquity > 0
+                ? '1px solid rgba(234, 179, 8, 0.2)'
+                : '1px solid var(--border-subtle)',
+              color: binanceEquity > 0 ? '#eab308' : 'var(--text-muted)',
+            }}
+          >
+            <span style={{ fontSize: '0.6875rem', opacity: 0.7 }}>Binance</span>
+            <span className="font-mono">{binanceEquity > 0 ? formatCurrency(binanceEquity) : '—'}</span>
+          </span>
 
           {/* Syncing indicator */}
           {isSyncing && (
@@ -211,7 +183,17 @@ function PortfolioSummary({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { account, positions, equitySnapshots, isLoading, isSyncing, error } = usePortfolio()
+  const {
+    account,
+    alpacaEquity,
+    binanceEquity,
+    positions,
+    equitySnapshots,
+    isLoading,
+    isSyncing,
+    error,
+  } = usePortfolio()
+  const { events: earningsEvents } = useEarnings()
   const [doctorOpen, setDoctorOpen] = useState(false)
   const navigate = useNavigate()
 
@@ -255,9 +237,9 @@ export default function Dashboard() {
           buying_power={account.buying_power}
           pnl_today={account.pnl_today}
           pnl_today_pct={account.pnl_today_pct}
+          alpacaEquity={alpacaEquity}
+          binanceEquity={binanceEquity}
           isSyncing={isSyncing}
-          broker={account.broker}
-          binanceEquity={(account as any).binance_equity}
         />
       )}
 
@@ -323,9 +305,9 @@ export default function Dashboard() {
           ) : (
             positions.map((pos) => (
               <PositionCard
-                key={pos.id}
+                key={`${pos.broker}-${pos.symbol}`}
                 position={pos}
-                earningsEvents={[]}
+                earningsEvents={earningsEvents}
                 compact
               />
             ))
@@ -419,7 +401,7 @@ export default function Dashboard() {
               </button>
             </div>
             <EarningsCalendar
-              events={[]}
+              events={earningsEvents}
               compact
               maxEvents={3}
               showHeader={false}

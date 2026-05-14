@@ -64,8 +64,23 @@ CREATE TRIGGER screener_presets_updated_at
   BEFORE UPDATE ON public.screener_presets
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- 4. Almacenamiento de keys de brokers (encriptadas o protegidas por RLS)
+CREATE TABLE IF NOT EXISTS public.user_broker_keys (
+  user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  broker      text NOT NULL CHECK (broker IN ('alpaca', 'binance')),
+  api_key     text NOT NULL,
+  secret_key  text NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, broker)
+);
+
+ALTER TABLE public.user_broker_keys ENABLE ROW LEVEL SECURITY;
+-- Solo las Edge Functions (service role) deben leer estas keys
+CREATE POLICY "Users can only insert/update own keys"
+  ON public.user_broker_keys FOR ALL
+  TO authenticated
+  USING (auth.uid() = user_id);
+
 -- ─────────────────────────────────────────────────────────────────────────────
--- SEED DATA: Presets por defecto (opcional, se puede insertar vía hook de registro)
+-- SEED DATA: Presets por defecto
 -- ─────────────────────────────────────────────────────────────────────────────
--- Nota: Como esto es una migración, los presets se pueden insertar 
--- para usuarios existentes o dejar que el frontend los proponga si no existen.

@@ -1,25 +1,58 @@
+// ─────────────────────────────────────────────────────────────────────────────
 // src/components/portfolio/PortfolioDoctor.tsx
-// Modal de análisis holístico IA del portafolio
-// Datos mock para Fase 5 visual — sin hooks ni Supabase
+// Modal de análisis holístico IA del portafolio. Llama a claude-portfolio-doctor
+// cuando se abre y muestra el resultado parseado en secciones accionables.
+// ─────────────────────────────────────────────────────────────────────────────
 
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatDate } from '../../lib/formatters'
+import { supabase } from '../../lib/supabase'
+
+const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 type RiskLevel = 'Conservative' | 'Moderate' | 'Aggressive'
 
-interface MockSection {
+interface AnalysisSection {
   icon: string
   title: string
   content: string
   recommendations?: Array<{ symbol: string; action: string }>
 }
 
-const MOCK_ANALYSIS: { risk: RiskLevel; sections: MockSection[]; analysisDate: string } = {
-  risk: 'Moderate',
-  analysisDate: new Date().toISOString(),
-  sections: [],
+interface DoctorAnalysis {
+  risk_level: RiskLevel
+  sections: AnalysisSection[]
+  analysis_date: string
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API call
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function runDoctorAnalysis(): Promise<DoctorAnalysis> {
+  let { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) {
+    const { data: refreshed } = await supabase.auth.refreshSession()
+    session = refreshed.session
+  }
+  if (!session?.access_token) throw new Error('Sin sesión activa')
+
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/claude-portfolio-doctor`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      apikey: SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+  })
+
+  const json = await res.json() as DoctorAnalysis & { error?: string }
+  if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
+  return json
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,7 +64,7 @@ function RiskBadge({ level }: { level: RiskLevel }) {
     Conservative: { bg: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.4)', color: '#60a5fa', icon: '🛡️' },
     Moderate:     { bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.4)',  color: '#fbbf24', icon: '⚖️' },
     Aggressive:   { bg: 'rgba(239,68,68,0.15)',   border: 'rgba(239,68,68,0.4)',   color: '#f87171', icon: '🔥' },
-  }[level]
+  }[level] ?? { bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.4)', color: '#fbbf24', icon: '⚖️' }
 
   return (
     <div style={{
@@ -56,7 +89,7 @@ function RiskBadge({ level }: { level: RiskLevel }) {
 // SectionCard
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SectionCard({ section, onNavigate }: { section: MockSection; onNavigate: (symbol: string) => void }) {
+function SectionCard({ section, onNavigate }: { section: AnalysisSection; onNavigate: (symbol: string) => void }) {
   return (
     <div style={{
       backgroundColor: 'var(--bg-elevated)',
@@ -101,13 +134,13 @@ function SectionCard({ section, onNavigate }: { section: MockSection; onNavigate
                 fontSize: '0.75rem',
                 fontWeight: 600,
                 cursor: 'pointer',
-                transition: 'background-color 120ms',
                 fontFamily: '"Syne", sans-serif',
+                transition: 'background-color 120ms',
               }}
               onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.18)')}
               onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.08)')}
             >
-              {r.symbol} →
+              {r.symbol} → {r.action}
             </button>
           ))}
         </div>
@@ -141,12 +174,12 @@ function LoadingState() {
           border: '3px solid transparent',
           borderTopColor: 'var(--color-primary)',
           borderRadius: '50%',
-          animation: 'spin 0.9s linear infinite',
+          animation: 'doctorSpin 0.9s linear infinite',
         }} />
         <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.375rem' }}>
           🩺
         </span>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <style>{`@keyframes doctorSpin { to { transform: rotate(360deg); } }`}</style>
       </div>
       <div style={{ textAlign: 'center' }}>
         <p style={{ fontFamily: '"Syne", sans-serif', fontWeight: 600, fontSize: '0.9375rem', color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
@@ -161,41 +194,96 @@ function LoadingState() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ErrorState
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', gap: '1rem', padding: '3rem 2rem', textAlign: 'center',
+    }}>
+      <span style={{ fontSize: '2rem' }}>⚠️</span>
+      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', maxWidth: '340px' }}>{message}</p>
+      <button
+        onClick={onRetry}
+        style={{
+          padding: '0.5rem 1.25rem',
+          borderRadius: '0.375rem',
+          border: '1px solid var(--color-primary)',
+          backgroundColor: 'transparent',
+          color: 'var(--color-primary)',
+          fontSize: '0.8125rem',
+          cursor: 'pointer',
+          fontFamily: '"Syne", sans-serif',
+          fontWeight: 600,
+        }}
+      >
+        Reintentar
+      </button>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PortfolioDoctor — Modal principal
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface PortfolioDoctorProps {
   isOpen: boolean
   onClose: () => void
-  analysis?: typeof MOCK_ANALYSIS | null
-  isLoading?: boolean
 }
 
-export default function PortfolioDoctor({
-  isOpen,
-  onClose,
-  analysis = MOCK_ANALYSIS,
-  isLoading = false,
-}: PortfolioDoctorProps) {
+export default function PortfolioDoctor({ isOpen, onClose }: PortfolioDoctorProps) {
   const navigate = useNavigate()
+  const [analysis, setAnalysis]   = useState<DoctorAnalysis | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [errorMsg, setErrorMsg]   = useState<string | null>(null)
 
-  if (!isOpen) return null
+  // Disparar análisis cuando se abre el modal (y no hay análisis previo)
+  useEffect(() => {
+    if (!isOpen) return
+    if (analysis || isLoading) return
 
-  const data = analysis ?? MOCK_ANALYSIS
+    setIsLoading(true)
+    setErrorMsg(null)
+
+    runDoctorAnalysis()
+      .then(setAnalysis)
+      .catch((e: Error) => setErrorMsg(e.message ?? 'Error al generar el análisis'))
+      .finally(() => setIsLoading(false))
+  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleRetry() {
+    setAnalysis(null)
+    setErrorMsg(null)
+    setIsLoading(true)
+
+    runDoctorAnalysis()
+      .then(setAnalysis)
+      .catch((e: Error) => setErrorMsg(e.message ?? 'Error al generar el análisis'))
+      .finally(() => setIsLoading(false))
+  }
 
   function handleNavigate(symbol: string) {
     onClose()
     navigate(`/trading?symbol=${symbol}`)
   }
 
+  function handleClose() {
+    onClose()
+    // No limpiar el análisis — se conserva si el usuario reabre el modal
+  }
+
+  if (!isOpen) return null
+
   return (
     <>
       {/* Backdrop */}
       <div
-        onClick={onClose}
+        onClick={handleClose}
         style={{
-          position: 'fixed',
-          inset: 0,
+          position: 'fixed', inset: 0,
           backgroundColor: 'rgba(0,0,0,0.7)',
           backdropFilter: 'blur(4px)',
           zIndex: 50,
@@ -207,8 +295,7 @@ export default function PortfolioDoctor({
       <div
         style={{
           position: 'fixed',
-          top: '50%',
-          left: '50%',
+          top: '50%', left: '50%',
           transform: 'translate(-50%, -50%)',
           zIndex: 51,
           width: 'min(90vw, 860px)',
@@ -219,12 +306,12 @@ export default function PortfolioDoctor({
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          animation: 'modalSlideIn 200ms ease-out',
+          animation: 'doctorModalIn 200ms ease-out',
           boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
         }}
       >
         <style>{`
-          @keyframes modalSlideIn {
+          @keyframes doctorModalIn {
             from { opacity: 0; transform: translate(-50%, -48%); }
             to   { opacity: 1; transform: translate(-50%, -50%); }
           }
@@ -248,21 +335,21 @@ export default function PortfolioDoctor({
                 fontWeight: 700,
                 fontSize: '1.125rem',
                 color: 'var(--text-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
               }}>
                 🩺 Portfolio Doctor
               </h2>
               <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
-                Análisis holístico · Claude claude-sonnet-4-20250514
+                Análisis holístico · claude-sonnet-4-20250514
               </p>
             </div>
-            {!isLoading && <RiskBadge level={data.risk} />}
+            {!isLoading && analysis && (
+              <RiskBadge level={analysis.risk_level} />
+            )}
           </div>
 
           <button
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Cerrar"
             style={{
               width: '32px', height: '32px',
@@ -272,8 +359,7 @@ export default function PortfolioDoctor({
               color: 'var(--text-muted)',
               cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1rem',
-              flexShrink: 0,
+              fontSize: '1rem', flexShrink: 0,
               transition: 'background-color 120ms',
             }}
             onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-elevated)')}
@@ -287,9 +373,11 @@ export default function PortfolioDoctor({
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
           {isLoading ? (
             <LoadingState />
-          ) : (
+          ) : errorMsg ? (
+            <ErrorState message={errorMsg} onRetry={handleRetry} />
+          ) : analysis ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {data.sections.map(section => (
+              {analysis.sections.map(section => (
                 <SectionCard
                   key={section.title}
                   section={section}
@@ -297,11 +385,11 @@ export default function PortfolioDoctor({
                 />
               ))}
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Footer */}
-        {!isLoading && (
+        {!isLoading && analysis && (
           <div style={{
             padding: '1rem 1.5rem',
             borderTop: '1px solid var(--border-subtle)',
@@ -313,11 +401,11 @@ export default function PortfolioDoctor({
             flexWrap: 'wrap',
           }}>
             <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              Análisis generado: {formatDate(data.analysisDate)} · Datos: posiciones + fundamentales FMP
+              Análisis: {formatDate(analysis.analysis_date)} · Datos: posiciones + fundamentales FMP
             </p>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               <button
-                onClick={onClose}
+                onClick={handleRetry}
                 style={{
                   padding: '0.5rem 1rem',
                   borderRadius: '0.375rem',
@@ -330,9 +418,10 @@ export default function PortfolioDoctor({
                   fontWeight: 500,
                 }}
               >
-                Cerrar
+                🔄 Nuevo análisis
               </button>
               <button
+                onClick={handleClose}
                 style={{
                   padding: '0.5rem 1.25rem',
                   borderRadius: '0.375rem',
@@ -343,12 +432,9 @@ export default function PortfolioDoctor({
                   cursor: 'pointer',
                   fontFamily: '"Syne", sans-serif',
                   fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.375rem',
                 }}
               >
-                💾 Guardar análisis
+                Cerrar
               </button>
             </div>
           </div>

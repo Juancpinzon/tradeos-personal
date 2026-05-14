@@ -1,22 +1,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// src/hooks/usePortfolio.ts — Hook principal de portafolio
-//
-// Llama a la Edge Function alpaca-proxy con fetch explícito + token de sesión.
-// React Query cachea 30s y refetch en background cada 60s.
-// El snapshot de equity se guarda en DB dentro de la Edge Function /account.
+// src/hooks/usePortfolio.ts — Hook principal de portafolio (Alpaca + Binance)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AccountSummary, Position, EquitySnapshot } from "../types";
 import { supabase } from "../lib/supabase";
-import { normalizeBinanceBalance } from "../lib/binance";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 export interface UsePortfolioReturn {
-  account: AccountSummary | null;
-  positions: Position[];
+  account: AccountSummary | null;       // total combinado
+  alpacaEquity: number;
+  binanceEquity: number;
+  positions: Position[];                // posiciones de ambos brokers
   equitySnapshots: EquitySnapshot[];
   isLoading: boolean;
   isSyncing: boolean;
@@ -26,21 +24,22 @@ export interface UsePortfolioReturn {
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-async function alpacaGet<T>(path: string): Promise<T> {
+async function getSession() {
   let { data: { session } } = await supabase.auth.getSession();
-
   if (!session?.access_token) {
     const { data: refreshed } = await supabase.auth.refreshSession();
     session = refreshed.session;
   }
+  return session;
+}
 
+async function edgeFetch<T>(path: string): Promise<T> {
+  const session = await getSession();
   if (!session?.access_token) {
     throw new Error("No hay sesión activa. Iniciá sesión nuevamente.");
   }
 
-  const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/alpaca-proxy${path}`, {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${path}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${session.access_token}`,
@@ -57,19 +56,34 @@ async function alpacaGet<T>(path: string): Promise<T> {
   return json as unknown as T;
 }
 
-async function binanceGet<T>(path: string): Promise<T | { configured: false }> {
-  let { data: { session } } = await supabase.auth.getSession();
+// ─── response types ───────────────────────────────────────────────────────────
 
+interface BinanceProxyResponse {
+  configured: boolean;
+  positions: Position[];
+  equity: number;
+  cash: number;
+  buying_power: number;
+}
+
+// ─── fetchers ────────────────────────────────────────────────────────────────
+
+async function fetchAlpacaAccount(): Promise<AccountSummary> {
+  const data = await edgeFetch<AccountSummary & { mode: string }>("alpaca-proxy/account");
+  return { ...data, broker: "alpaca" };
+}
+
+async function fetchAlpacaPositions(): Promise<Position[]> {
+  return edgeFetch<Position[]>("alpaca-proxy/positions");
+}
+
+async function fetchBinancePositions(): Promise<BinanceProxyResponse> {
+  const session = await getSession();
   if (!session?.access_token) {
-    const { data: refreshed } = await supabase.auth.refreshSession();
-    session = refreshed.session;
+    return { configured: false, positions: [], equity: 0, cash: 0, buying_power: 0 };
   }
 
-  if (!session?.access_token) return { configured: false };
-
-  const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/binance-proxy${path}`, {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/binance-proxy/positions`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${session.access_token}`,
@@ -78,88 +92,20 @@ async function binanceGet<T>(path: string): Promise<T | { configured: false }> {
     },
   });
 
-  if (!res.ok) {
-    if (res.status === 503) return { configured: false };
-    const json = await res.json().catch(() => ({}));
-    if (json.configured === false) return { configured: false };
-    return { configured: false }; 
-  }
-  
-  return (await res.json()) as T;
-}
-
-// ─── fetchers ────────────────────────────────────────────────────────────────
-
-async function fetchAccount(): Promise<AccountSummary & { binance_equity?: number }> {
-  const alpaca = await alpacaGet<AccountSummary & { mode: string }>("/account");
-  
-  try {
-    const binanceBalances = await binanceGet<any[]>("/balances");
-    if (Array.isArray(binanceBalances)) {
-      const pricesRaw = await binanceGet<any[]>("/prices");
-      const prices = Array.isArray(pricesRaw) ? pricesRaw : [];
-      
-      const binanceEquity = binanceBalances.reduce((sum, b) => {
-        if (b.asset === "USDT") return sum + b.free + b.locked;
-        const p = prices.find(p => p.symbol === `${b.asset}USDT`);
-        return sum + (b.free + b.locked) * (p ? parseFloat(p.price) : 0);
-      }, 0);
-
-      const binanceCash = binanceBalances.find(b => b.asset === "USDT")?.free ?? 0;
-
-      return {
-        ...alpaca,
-        equity: alpaca.equity + binanceEquity,
-        cash: alpaca.cash + binanceCash,
-        binance_equity: binanceEquity,
-        broker: "total"
-      };
-    }
-  } catch (e) {
-    console.warn("Error fetching Binance account:", e);
-  }
-
-  return { ...alpaca, broker: "alpaca" };
-}
-
-async function fetchPositions(): Promise<Position[]> {
-  const alpacaPositions = await alpacaGet<Position[]>("/positions");
-  
-  try {
-    const binanceBalances = await binanceGet<any[]>("/balances");
-    if (Array.isArray(binanceBalances)) {
-      const pricesRaw = await binanceGet<any[]>("/prices");
-      const prices = Array.isArray(pricesRaw) ? pricesRaw : [];
-      
-      const binancePositions = binanceBalances
-        .filter(b => b.asset !== "USDT") // Ignorar cash
-        .map(b => {
-          const p = prices.find(p => p.symbol === `${b.asset}USDT`);
-          const price = p ? parseFloat(p.price) : 0;
-          return normalizeBinanceBalance(b, price);
-        })
-        .filter(p => p.market_value > 1); // Solo posiciones con valor > $1
-
-      return [...alpacaPositions, ...binancePositions];
-    }
-  } catch (e) {
-    console.warn("Error fetching Binance positions:", e);
-  }
-
-  return alpacaPositions;
+  const json = await res.json() as BinanceProxyResponse;
+  // binance-proxy devuelve { configured: false } cuando las keys no están — no es un error
+  return json;
 }
 
 async function fetchEquitySnapshots(): Promise<EquitySnapshot[]> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
   const { data, error } = await supabase
     .from("equity_snapshots")
     .select("*")
     .eq("user_id", user.id)
-    .eq("broker", "alpaca")
+    .in("broker", ["alpaca", "total"])
     .order("snapshot_at", { ascending: true })
     .limit(90);
 
@@ -172,19 +118,27 @@ async function fetchEquitySnapshots(): Promise<EquitySnapshot[]> {
 export function usePortfolio(): UsePortfolioReturn {
   const queryClient = useQueryClient();
 
-  const accountQuery = useQuery({
-    queryKey: ["portfolio", "account"],
-    queryFn: fetchAccount,
+  const alpacaAccountQuery = useQuery({
+    queryKey: ["portfolio", "alpaca", "account"],
+    queryFn: fetchAlpacaAccount,
     staleTime: 30_000,
     refetchInterval: 60_000,
     retry: false,
   });
 
-  const positionsQuery = useQuery({
-    queryKey: ["portfolio", "positions"],
-    queryFn: fetchPositions,
+  const alpacaPositionsQuery = useQuery({
+    queryKey: ["portfolio", "alpaca", "positions"],
+    queryFn: fetchAlpacaPositions,
     staleTime: 30_000,
     refetchInterval: 60_000,
+    retry: false,
+  });
+
+  const binanceQuery = useQuery({
+    queryKey: ["portfolio", "binance"],
+    queryFn: fetchBinancePositions,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
     retry: false,
   });
 
@@ -192,7 +146,7 @@ export function usePortfolio(): UsePortfolioReturn {
     queryKey: ["portfolio", "snapshots"],
     queryFn: fetchEquitySnapshots,
     staleTime: 60_000,
-    enabled: accountQuery.isSuccess,
+    enabled: alpacaAccountQuery.isSuccess,
     retry: 1,
   });
 
@@ -200,21 +154,61 @@ export function usePortfolio(): UsePortfolioReturn {
     void queryClient.invalidateQueries({ queryKey: ["portfolio"] });
   }, [queryClient]);
 
-  const isLoading = accountQuery.isPending || positionsQuery.isPending;
+  const isLoading = alpacaAccountQuery.isPending || alpacaPositionsQuery.isPending;
   const isSyncing =
-    (accountQuery.isFetching || positionsQuery.isFetching) && !isLoading;
-  const error = accountQuery.error ?? positionsQuery.error ?? null;
+    (alpacaAccountQuery.isFetching ||
+      alpacaPositionsQuery.isFetching ||
+      binanceQuery.isFetching) &&
+    !isLoading;
+  const error = alpacaAccountQuery.error ?? alpacaPositionsQuery.error ?? null;
 
-  // Recalcular portfolio_weight_pct usando equity total de la cuenta (incluye cash)
-  const equity = accountQuery.data?.equity ?? 0;
-  const positions: Position[] = (positionsQuery.data ?? []).map((pos) => ({
+  const alpacaEquity  = alpacaAccountQuery.data?.equity ?? 0;
+  const binanceData   = binanceQuery.data;
+  const binanceEquity = binanceData?.equity ?? 0;
+  const totalEquity   = alpacaEquity + binanceEquity;
+
+  // Posiciones Alpaca — portfolio_weight_pct relativo al total global
+  const alpacaPositions: Position[] = (alpacaPositionsQuery.data ?? []).map((pos) => ({
     ...pos,
     portfolio_weight_pct:
-      equity > 0 ? (pos.market_value / equity) * 100 : pos.portfolio_weight_pct,
+      totalEquity > 0 ? (pos.market_value / totalEquity) * 100 : pos.portfolio_weight_pct,
   }));
 
+  // Posiciones Binance — ya normalizadas por la Edge Function
+  const binancePositions: Position[] = (
+    binanceData?.configured && Array.isArray(binanceData.positions)
+      ? binanceData.positions
+      : []
+  ).map((pos) => ({
+    ...pos,
+    id:        (pos.id ?? `bnb-${pos.symbol}`),
+    user_id:   (pos.user_id ?? ""),
+    synced_at: (pos.synced_at ?? new Date().toISOString()),
+    created_at:(pos.created_at ?? new Date().toISOString()),
+    portfolio_weight_pct:
+      totalEquity > 0 ? (pos.market_value / totalEquity) * 100 : 0,
+  }));
+
+  const positions: Position[] = [...alpacaPositions, ...binancePositions];
+
+  // AccountSummary total
+  const alpacaAcc = alpacaAccountQuery.data;
+  const account: AccountSummary | null = alpacaAcc
+    ? {
+        equity:        totalEquity,
+        cash:          alpacaAcc.cash + (binanceData?.cash ?? 0),
+        buying_power:  alpacaAcc.buying_power + (binanceData?.buying_power ?? 0),
+        pnl_today:     alpacaAcc.pnl_today,
+        pnl_today_pct: alpacaAcc.pnl_today_pct,
+        broker:        "total",
+        mode:          alpacaAcc.mode,
+      }
+    : null;
+
   return {
-    account: (accountQuery.data as AccountSummary) ?? null,
+    account,
+    alpacaEquity,
+    binanceEquity,
     positions,
     equitySnapshots: snapshotsQuery.data ?? [],
     isLoading,
