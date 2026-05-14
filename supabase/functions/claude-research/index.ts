@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
           .then(r => r.json()).catch(() => null)
       : Promise.resolve(null),
 
-    // Finviz — fuente de RSI(14), earnings date, P/E, EPS, Sales Q/Q (sin API key)
+    // Yahoo Finance — fuente de P/E, EPS, Sales Q/Q, Earnings Date (vía fmp-proxy)
     fetch(`${supabaseUrl}/functions/v1/fmp-proxy/finviz/${sym}`, {
       headers: { Authorization: authHeader },
     }).then(r => r.json()).catch(() => null),
@@ -141,8 +141,8 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const fmpData    = fmpResult.status    === "fulfilled" ? fmpResult.value?.data    : null
-  const finvizData = finvizResult.status === "fulfilled" ? finvizResult.value?.data : null
+  const fmpData   = fmpResult.status   === "fulfilled" ? fmpResult.value?.data   : null
+  const yahooData = finvizResult.status === "fulfilled" ? finvizResult.value?.data : null
 
   const position = positionResult.status === "fulfilled"
     ? positionResult.value.data
@@ -161,22 +161,22 @@ Deno.serve(async (req: Request) => {
   // Precio fresco de Alpaca si FMP falla
   const alpacaPrice = quoteData?.price ?? (bars.length ? bars[bars.length - 1]?.c : null)
 
-  // RSI: preferir Finviz (fuente canónica del mercado) sobre el calculado desde barras
+  // RSI: Yahoo no da RSI directamente, así que usamos el calculado desde las barras (Alpaca/AV)
   const rsiFromBars = bars.length >= 15 ? calculateRSI(bars.map((b: Bar) => b.c), 14) : null
-  const rsiWeekly   = finvizData?.rsi_14 ?? rsiFromBars
-  const rsiSource   = finvizData?.rsi_14 != null ? "finviz" : (rsiFromBars != null ? "bars" : null)
+  const rsiWeekly   = yahooData?.rsi_14 ?? rsiFromBars
+  const rsiSource   = yahooData?.rsi_14 != null ? "yahoo" : (rsiFromBars != null ? "bars" : null)
 
-  // Precio y ATH — prioridad: FMP > Finviz > Alpaca > barras
-  const price      = fmpData?.price        ?? finvizData?.price
+  // Precio y ATH — prioridad: FMP > Yahoo > Alpaca > barras
+  const price      = fmpData?.price       ?? yahooData?.price
                      ?? alpacaPrice
-  const week52High = fmpData?.week_52_high ?? finvizData?.week_52_high
+  const week52High = fmpData?.week_52_high ?? yahooData?.week_52_high
                      ?? (bars.length ? Math.max(...bars.map((b: Bar) => b.h)) : 0)
-  const week52Low  = fmpData?.week_52_low  ?? finvizData?.week_52_low
+  const week52Low  = fmpData?.week_52_low  ?? yahooData?.week_52_low
                      ?? (bars.length ? Math.min(...bars.map((b: Bar) => b.l)) : 0)
   const athDist    = week52High > 0 && price
     ? ((price - week52High) / week52High) * 100
     : null
-  const volume     = fmpData?.volume ?? finvizData?.volume
+  const volume     = fmpData?.volume ?? yahooData?.volume
                      ?? (bars.length ? bars[bars.length - 1]?.v : null)
   const volumeAvg30 = bars.length
     ? bars.slice(-30).reduce((s: number, b: Bar) => s + b.v, 0) / Math.min(bars.length, 30)
@@ -185,21 +185,21 @@ Deno.serve(async (req: Request) => {
   // ── Construir snapshots ─────────────────────────────────────────────────────
   const dataSnapshot = {
     price,
-    price_change_pct_1d:  fmpData?.price_change_pct_1d  ?? finvizData?.price_change_pct_1d ?? null,
+    price_change_pct_1d:  fmpData?.price_change_pct_1d  ?? yahooData?.price_change_pct_1d ?? null,
     volume,
     volume_avg_30d:       volumeAvg30,
-    market_cap:           fmpData?.market_cap            ?? null,
+    market_cap:           fmpData?.market_cap            ?? yahooData?.market_cap ?? null,
     week_52_high:         week52High,
     week_52_low:          week52Low,
     ath_distance_pct:     athDist,
     rsi_weekly:           rsiWeekly,
     rsi_source:           rsiSource,
-    eps_current:          fmpData?.eps_current      ?? finvizData?.eps_current      ?? null,
-    eps_next_estimate:    fmpData?.eps_next_estimate ?? finvizData?.eps_next_estimate ?? null,
-    eps_growth_next_pct:  fmpData?.eps_growth_next_pct ?? finvizData?.eps_growth_next_pct ?? null,
-    revenue_growth_pct:   fmpData?.revenue_growth_pct   ?? finvizData?.revenue_growth_pct   ?? null,
-    pe_ratio:             fmpData?.pe_ratio          ?? finvizData?.pe_ratio          ?? null,
-    next_earnings_date:   fmpData?.next_earnings_date ?? finvizData?.next_earnings_date ?? null,
+    eps_current:          fmpData?.eps_current      ?? yahooData?.eps_current      ?? null,
+    eps_next_estimate:    fmpData?.eps_next_estimate ?? yahooData?.eps_next_estimate ?? null,
+    eps_growth_next_pct:  fmpData?.eps_growth_next_pct ?? yahooData?.eps_growth_next_pct ?? null,
+    revenue_growth_pct:   fmpData?.revenue_growth_pct   ?? yahooData?.revenue_growth_pct   ?? null,
+    pe_ratio:             fmpData?.pe_ratio          ?? yahooData?.pe_ratio          ?? null,
+    next_earnings_date:   fmpData?.next_earnings_date ?? yahooData?.next_earnings_date ?? null,
     fetched_at:           new Date().toISOString(),
   }
 
@@ -367,7 +367,7 @@ function buildDataContext(
 
 Precio: $${fmt(snap.price)} | Cambio 1d: ${fmtSign(snap.price_change_pct_1d)}%
 Dist. ATH (52w high): ${fmtSign(snap.ath_distance_pct)}%
-RSI (14): ${snap.rsi_weekly != null ? `${snap.rsi_weekly}${snap.rsi_source === "finviz" ? " [Finviz]" : ""}` : "No disponible"}
+RSI (14): ${snap.rsi_weekly != null ? `${snap.rsi_weekly}${snap.rsi_source === "yahoo" ? " [Yahoo]" : snap.rsi_source === "finviz" ? " [Finviz]" : ""}` : "No disponible"}
 Volumen: ${snap.volume?.toLocaleString() ?? "N/D"} | Vol. prom. 30d: ${snap.volume_avg_30d?.toFixed(0) ?? "N/D"}
 Market Cap: ${snap.market_cap ? "$" + (snap.market_cap / 1e9).toFixed(1) + "B" : fundUnavailable}
 

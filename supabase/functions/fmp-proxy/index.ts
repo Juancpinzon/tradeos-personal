@@ -9,10 +9,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const FMP_BASE    = "https://financialmodelingprep.com/api/v3"
 const AV_BASE     = "https://www.alphavantage.co/query"
-const FINVIZ_BASE = "https://finviz.com/quote.ashx"
+const YAHOO_BASE  = "https://query1.finance.yahoo.com/v10/finance/quoteSummary"
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000  // 24 horas
 
-// User-Agent requerido por Finviz — sin él retorna 403
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 function json(data: unknown, status = 200) {
@@ -86,11 +85,10 @@ Deno.serve(async (req: Request) => {
     }
 
     // GET /finviz/{symbol}
-    // Scraping de Finviz con fallback a Alpha Vantage si bloquea.
-    // NO requiere FMP_API_KEY.
+    // NOTA: Mantenemos el nombre del endpoint por compatibilidad, pero ahora usa Yahoo Finance
     if (endpoint[0] === "finviz" && endpoint[1]) {
       const symbol = endpoint[1].toUpperCase()
-      return await fetchFinviz(symbol, supabase, avKey ?? null)
+      return await fetchYahooFinance(symbol, supabase, avKey ?? null)
     }
 
     return err("Unknown endpoint", 404)
@@ -261,62 +259,15 @@ function addDays(date: Date, days: number): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// parseFinvizHtml — extrae los datos de la snapshot-table2 de Finviz
-// Estructura de cada celda: <td><div[>|><a>]LABEL[</a>]</div>VALUE</td>
-// El valor puede estar envuelto en <b>, <small>, <a>, <span> o texto plano.
+// fetchYahooFinance — reemplaza al scraper de Finviz que daba 403
 // ─────────────────────────────────────────────────────────────────────────────
 
-function parseFinvizHtml(html: string): Record<string, string> {
-  const result: Record<string, string> = {}
-
-  // Extraer solo el bloque de la snapshot-table2
-  const tableMatch = html.match(/<table[^>]*class="[^"]*snapshot-table2[^"]*"[^>]*>([\s\S]*?)<\/table>/i)
-  if (!tableMatch) {
-    console.warn("[Finviz] snapshot-table2 not found in HTML")
-    return result
-  }
-  const tableHtml = tableMatch[0]
-
-  // Regex para capturar cada <td>...</td>
-  const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi
-  let tdMatch: RegExpExecArray | null
-
-  while ((tdMatch = tdRegex.exec(tableHtml)) !== null) {
-    const tdContent = tdMatch[1]
-    
-    // Buscar el label dentro del div
-    const labelMatch = tdContent.match(/<div[^>]*>([\s\S]*?)<\/div>/i)
-    if (!labelMatch) continue
-
-    const label = labelMatch[1].replace(/<[^>]+>/g, " ").trim()
-    
-    // El valor es lo que queda después del div
-    const valueRaw = tdContent.replace(labelMatch[0], "")
-    const value = valueRaw
-      .replace(/<[^>]+>/g, " ")  // quitar tags <b>, <span>, etc.
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-
-    if (label) {
-      result[label] = value
-    }
-  }
-
-  return result
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// fetchFinviz — scraping de Finviz con fallback a Alpha Vantage
-// Cachea en fundamentals_cache con el mismo schema que FMP/AV.
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function fetchFinviz(
+async function fetchYahooFinance(
   symbol: string,
   supabase: ReturnType<typeof createClient>,
   avKey: string | null,
 ) {
-  // 1. Revisar cache (24h TTL compartido con FMP/AV)
+  // 1. Revisar cache
   const { data: cached } = await supabase
     .from("fundamentals_cache")
     .select("*")
@@ -330,111 +281,83 @@ async function fetchFinviz(
     }
   }
 
-  // 2. Intentar Finviz
-  console.log(`[Finviz] Fetching ${FINVIZ_BASE}?t=${symbol}`)
-  let finvizData: Record<string, string> = {}
-  let finvizOk = false
+  // 2. Intentar Yahoo Finance
+  const modules = "financialData,defaultKeyStatistics,earningsTrend,summaryDetail"
+  const url = `${YAHOO_BASE}/${symbol}?modules=${modules}`
+  console.log(`[Yahoo] Fetching ${url}`)
+
+  let yahooOk = false
+  let payload: any = null
 
   try {
-    const res = await fetch(`${FINVIZ_BASE}?t=${symbol}&ty=c&ta=1&p=d`, {
+    const res = await fetch(url, {
       headers: {
-        "User-Agent":      BROWSER_UA,
-        "Accept":          "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control":   "no-cache",
-        "Referer":         "https://finviz.com/",
+        "User-Agent": BROWSER_UA,
+        "Accept":     "application/json",
       },
     })
 
-    console.log(`[Finviz] HTTP ${res.status} for ${symbol}`)
-
     if (res.ok) {
-      const html = await res.text()
-      finvizData = parseFinvizHtml(html)
-      // Validar que obtuvimos datos útiles
-      finvizOk = Object.keys(finvizData).length > 5 && "P/E" in finvizData
-      if (!finvizOk) {
-        console.warn(`[Finviz] Parsed ${Object.keys(finvizData).length} fields — insuficiente para ${symbol}`)
-      } else {
-        console.log(`[Finviz] OK — ${Object.keys(finvizData).length} fields para ${symbol}`)
+      const body = await res.json()
+      const result = body.quoteSummary?.result?.[0]
+      if (result) {
+        const stats     = result.defaultKeyStatistics ?? {}
+        const fin       = result.financialData        ?? {}
+        const summary   = result.summaryDetail        ?? {}
+        const trend     = result.earningsTrend?.trend?.[0] ?? {}
+
+        const epsCurr    = stats.trailingEps?.raw ?? null
+        const epsNextVal = trend.earningsEstimate?.avg?.raw ?? null
+        const peRatio    = summary.trailingPE?.raw ?? null
+        
+        // Yahoo da revenue growth como 0.1234 → convertir a % (12.34)
+        const revenueGrowth = fin.revenueGrowth?.raw ? fin.revenueGrowth.raw * 100 : null
+
+        // Earnings Date: Yahoo suele darlo en trend.endDate (ej: "2024-06-30")
+        // O en calendarEvents.earnings.earningsDate[0].fmt
+        const earningsDate = trend.endDate ?? null
+
+        const epsGrowthPct = epsNextVal && epsCurr && epsCurr !== 0
+          ? ((epsNextVal - epsCurr) / Math.abs(epsCurr)) * 100
+          : null
+
+        payload = {
+          symbol,
+          eps_current:                epsCurr,
+          eps_next_estimate:          epsNextVal,
+          eps_growth_next_pct:        epsGrowthPct,
+          revenue_growth_pct:         revenueGrowth,
+          pe_ratio:                   peRatio,
+          next_earnings_date:         earningsDate,
+          next_earnings_estimate_eps: epsNextVal,
+          price:                      fin.currentPrice?.raw ?? summary.previousClose?.raw ?? null,
+          market_cap:                 summary.marketCap?.raw ?? null,
+          week_52_high:               summary.fiftyTwoWeekHigh?.raw ?? null,
+          week_52_low:                summary.fiftyTwoWeekLow?.raw ?? null,
+          price_change_pct_1d:        null, 
+          volume:                     summary.volume?.raw ?? null,
+          name:                       symbol,
+          fetched_at:                 new Date().toISOString(),
+        }
+        yahooOk = true
       }
     } else {
-      console.warn(`[Finviz] Blocked (${res.status}) para ${symbol} — usando fallback AV`)
+      console.warn(`[Yahoo] Error ${res.status} para ${symbol}`)
     }
   } catch (e) {
-    console.error(`[Finviz] Fetch error para ${symbol}:`, e)
+    console.error(`[Yahoo] Fetch error para ${symbol}:`, e)
   }
 
-  // 3. Si Finviz falla y hay AV key, usar Alpha Vantage como fallback
-  if (!finvizOk) {
+  // 3. Fallback a Alpha Vantage
+  if (!yahooOk) {
     if (avKey) {
-      console.log(`[Finviz→AV] Fallback a Alpha Vantage para ${symbol}`)
+      console.log(`[Yahoo→AV] Fallback a Alpha Vantage para ${symbol}`)
       return await fetchAlphaVantage(symbol, supabase, avKey)
     }
-    return json({ source: "finviz", data: null }, 502)
+    return json({ source: "yahoo", data: null }, 502)
   }
 
-  // 4. Mapear campos de Finviz al schema interno
-  const pNum = (key: string): number | null => {
-    const raw = finvizData[key]
-    if (!raw || raw === "-" || raw === "N/A") return null
-    // Eliminar %, B, M, K y signos
-    const cleaned = raw.replace(/[%BMK,]/g, "").replace(/[^\d.-]/g, "").trim()
-    const v = parseFloat(cleaned)
-    return isNaN(v) ? null : v
-  }
-
-  // EPS next Y aparece dos veces en Finviz: primero como valor $, luego como %
-  // Tomamos el primero (valor en dólares)
-  const epsNextRaw = finvizData["EPS next Y"] ?? null
-  const epsNextVal = epsNextRaw && !epsNextRaw.includes("%")
-    ? parseFloat(epsNextRaw.replace(/[^\d.-]/g, "")) || null
-    : null
-
-  // Sales Q/Q viene como "16.60%" → extraer número
-  const salesQQRaw = finvizData["Sales Q/Q"] ?? ""
-  const revenueGrowth = salesQQRaw
-    ? parseFloat(salesQQRaw.replace("%", "").trim()) || null
-    : null
-
-  // Earnings: "Apr 30 AMC" → parsear fecha → "YYYY-MM-DD"
-  const earningsRaw = finvizData["Earnings"] ?? ""
-  const earningsDate = parseFinvizEarningsDate(earningsRaw)
-
-  // RSI viene como número string
-  const rsiVal = pNum("RSI (14)")
-
-  const epsCurr    = pNum("EPS (ttm)")
-  const peRatio    = pNum("P/E")
-  const week52High = pNum("52W High")
-  const week52Low  = pNum("52W Low")
-  const price      = pNum("Price") ?? pNum("52W High")   // Price no siempre está en snapshot
-
-  const epsGrowthPct = epsNextVal && epsCurr && epsCurr !== 0
-    ? ((epsNextVal - epsCurr) / Math.abs(epsCurr)) * 100
-    : null
-
-  const payload = {
-    symbol,
-    eps_current:                epsCurr,
-    eps_next_estimate:          epsNextVal,
-    eps_growth_next_pct:        epsGrowthPct,
-    revenue_growth_pct:         revenueGrowth,
-    pe_ratio:                   peRatio,
-    next_earnings_date:         earningsDate,
-    next_earnings_estimate_eps: epsNextVal,
-    price,
-    market_cap:                 null,   // no disponible en snapshot, usar AV/FMP si necesario
-    week_52_high:               week52High,
-    week_52_low:                week52Low,
-    price_change_pct_1d:        null,   // no en snapshot-table2
-    volume:                     null,
-    name:                       symbol,
-    rsi_14:                     rsiVal,  // campo extra útil para claude-research
-    fetched_at:                 new Date().toISOString(),
-  }
-
-  // 5. Upsert en cache
+  // 4. Upsert en cache
   await supabase.from("fundamentals_cache").upsert({
     symbol,
     eps_current:                payload.eps_current,
@@ -454,44 +377,7 @@ async function fetchFinviz(
     fetched_at:                 new Date().toISOString(),
   })
 
-  return json({ source: "finviz", data: payload })
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// parseFinvizEarningsDate — convierte "Apr 30 AMC" → "2025-04-30"
-// AMC = After Market Close, BMO = Before Market Open (se descarta el sufijo)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function parseFinvizEarningsDate(raw: string): string | null {
-  if (!raw || raw === "-" || raw.toLowerCase() === "n/a") return null
-
-  // Eliminar sufijos AMC / BMO / etc.
-  const clean = raw.replace(/\s*(AMC|BMO|BTO|AH|AMO)\s*$/i, "").trim()
-
-  const MONTHS: Record<string, string> = {
-    Jan: "01", Feb: "02", Mar: "03", Apr: "04",
-    May: "05", Jun: "06", Jul: "07", Aug: "08",
-    Sep: "09", Oct: "10", Nov: "11", Dec: "12",
-  }
-
-  // Formato: "Apr 30"
-  const m = clean.match(/^([A-Za-z]{3})\s+(\d{1,2})(?:\s+(\d{4}))?$/)
-  if (!m) return null
-
-  const month = MONTHS[m[1]] ?? null
-  if (!month) return null
-
-  const day = m[2].padStart(2, "0")
-  // Si no hay año, inferir: si el mes ya pasó este año, usar el año siguiente
-  let year = m[3] ? m[3] : (() => {
-    const now = new Date()
-    const testDate = new Date(`${now.getFullYear()}-${month}-${day}`)
-    return testDate < now
-      ? String(now.getFullYear() + 1)
-      : String(now.getFullYear())
-  })()
-
-  return `${year}-${month}-${day}`
+  return json({ source: "yahoo", data: payload })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
