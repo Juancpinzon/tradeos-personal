@@ -64,8 +64,8 @@ function EarningsBadge({ days }: { days: number }) {
 // BrokerBadge
 // ─────────────────────────────────────────────────────────────────────────────
 
-function BrokerBadge({ broker }: { broker: 'alpaca' | 'binance' }) {
-  const isAlpaca = broker === 'alpaca'
+function BrokerBadge({ assetClass }: { assetClass: 'equity' | 'crypto' }) {
+  const isEquity = assetClass === 'equity'
   return (
     <span
       style={{
@@ -77,14 +77,14 @@ function BrokerBadge({ broker }: { broker: 'alpaca' | 'binance' }) {
         fontWeight: 700,
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
-        backgroundColor: isAlpaca
+        backgroundColor: isEquity
           ? 'rgba(59, 130, 246, 0.1)'
           : 'rgba(234, 179, 8, 0.1)',
-        border: `1px solid ${isAlpaca ? 'rgba(59, 130, 246, 0.25)' : 'rgba(234, 179, 8, 0.25)'}`,
-        color: isAlpaca ? '#60a5fa' : '#ca8a04',
+        border: `1px solid ${isEquity ? 'rgba(59, 130, 246, 0.25)' : 'rgba(234, 179, 8, 0.25)'}`,
+        color: isEquity ? '#60a5fa' : '#ca8a04',
       }}
     >
-      {isAlpaca ? 'ALP' : 'BNB'}
+      {isEquity ? 'NYSE' : 'CRYPTO'}
     </span>
   )
 }
@@ -150,7 +150,7 @@ export default function PositionCard({ position, earningsEvents = [], compact = 
           >
             {position.symbol}
           </span>
-          <BrokerBadge broker={position.broker} />
+          <BrokerBadge assetClass={position.asset_class} />
           <span className={`badge badge-${position.side}`} style={{ fontSize: '0.5rem' }}>
             {position.side.toUpperCase()}
           </span>

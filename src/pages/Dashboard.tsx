@@ -33,9 +33,15 @@ function PortfolioSummary({
   pnl_today:    number
   pnl_today_pct: number
   isSyncing:    boolean
+  broker:       string
+  binanceEquity?: number
 }) {
+  const navigate = useNavigate()
   const pnlColor    = pnl_today >= 0 ? '#10b981' : '#ef4444'
   const pnlPositive = pnl_today >= 0
+
+  const isUnified = broker === 'total'
+  const alpacaEquity = isUnified ? equity - (binanceEquity ?? 0) : equity
 
   return (
     <div
@@ -121,27 +127,57 @@ function PortfolioSummary({
             }}
           >
             <span style={{ fontSize: '0.6875rem', opacity: 0.7 }}>Alpaca</span>
-            <span className="font-mono">{formatCurrency(equity)}</span>
+            <span className="font-mono">{formatCurrency(alpacaEquity)}</span>
           </span>
 
-          {/* Binance placeholder */}
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.375rem',
-              padding: '0.25rem 0.625rem',
-              borderRadius: '0.25rem',
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              backgroundColor: 'var(--bg-elevated)',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-muted)',
-            }}
-          >
-            <span style={{ fontSize: '0.6875rem' }}>Binance</span>
-            <span className="font-mono">—</span>
-          </span>
+          {/* Binance badge */}
+          {isUnified ? (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                padding: '0.25rem 0.625rem',
+                borderRadius: '0.25rem',
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                backgroundColor: 'rgba(234, 179, 8, 0.1)',
+                border: '1px solid rgba(234, 179, 8, 0.2)',
+                color: '#eab308',
+              }}
+            >
+              <span style={{ fontSize: '0.6875rem', opacity: 0.7 }}>Binance</span>
+              <span className="font-mono">{formatCurrency(binanceEquity ?? 0)}</span>
+            </span>
+          ) : (
+            <button
+              onClick={() => navigate('/settings')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                padding: '0.25rem 0.625rem',
+                borderRadius: '0.25rem',
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                backgroundColor: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                transition: 'all 150ms'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'rgba(234, 179, 8, 0.4)'
+                e.currentTarget.style.color = 'var(--text-secondary)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'var(--border-subtle)'
+                e.currentTarget.style.color = 'var(--text-muted)'
+              }}
+            >
+              <span style={{ fontSize: '0.6875rem' }}>+ Conectar Binance</span>
+            </button>
+          )}
 
           {/* Syncing indicator */}
           {isSyncing && (
@@ -220,6 +256,8 @@ export default function Dashboard() {
           pnl_today={account.pnl_today}
           pnl_today_pct={account.pnl_today_pct}
           isSyncing={isSyncing}
+          broker={account.broker}
+          binanceEquity={(account as any).binance_equity}
         />
       )}
 

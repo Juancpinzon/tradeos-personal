@@ -10,6 +10,7 @@ import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AccountSummary, Position, EquitySnapshot } from "../types";
 import { supabase } from "../lib/supabase";
+import { normalizeBinanceBalance } from "../lib/binance";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
@@ -56,16 +57,96 @@ async function alpacaGet<T>(path: string): Promise<T> {
   return json as unknown as T;
 }
 
+async function binanceGet<T>(path: string): Promise<T | { configured: false }> {
+  let { data: { session } } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    session = refreshed.session;
+  }
+
+  if (!session?.access_token) return { configured: false };
+
+  const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/binance-proxy${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      apikey: SUPABASE_ANON_KEY,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    if (res.status === 503) return { configured: false };
+    const json = await res.json().catch(() => ({}));
+    if (json.configured === false) return { configured: false };
+    return { configured: false }; 
+  }
+  
+  return (await res.json()) as T;
+}
+
 // ─── fetchers ────────────────────────────────────────────────────────────────
 
-async function fetchAccount(): Promise<AccountSummary> {
-  const data = await alpacaGet<AccountSummary & { mode: string }>("/account");
-  return { ...data, broker: "alpaca" };
+async function fetchAccount(): Promise<AccountSummary & { binance_equity?: number }> {
+  const alpaca = await alpacaGet<AccountSummary & { mode: string }>("/account");
+  
+  try {
+    const binanceBalances = await binanceGet<any[]>("/balances");
+    if (Array.isArray(binanceBalances)) {
+      const pricesRaw = await binanceGet<any[]>("/prices");
+      const prices = Array.isArray(pricesRaw) ? pricesRaw : [];
+      
+      const binanceEquity = binanceBalances.reduce((sum, b) => {
+        if (b.asset === "USDT") return sum + b.free + b.locked;
+        const p = prices.find(p => p.symbol === `${b.asset}USDT`);
+        return sum + (b.free + b.locked) * (p ? parseFloat(p.price) : 0);
+      }, 0);
+
+      const binanceCash = binanceBalances.find(b => b.asset === "USDT")?.free ?? 0;
+
+      return {
+        ...alpaca,
+        equity: alpaca.equity + binanceEquity,
+        cash: alpaca.cash + binanceCash,
+        binance_equity: binanceEquity,
+        broker: "total"
+      };
+    }
+  } catch (e) {
+    console.warn("Error fetching Binance account:", e);
+  }
+
+  return { ...alpaca, broker: "alpaca" };
 }
 
 async function fetchPositions(): Promise<Position[]> {
-  const data = await alpacaGet<Position[]>("/positions");
-  return data;
+  const alpacaPositions = await alpacaGet<Position[]>("/positions");
+  
+  try {
+    const binanceBalances = await binanceGet<any[]>("/balances");
+    if (Array.isArray(binanceBalances)) {
+      const pricesRaw = await binanceGet<any[]>("/prices");
+      const prices = Array.isArray(pricesRaw) ? pricesRaw : [];
+      
+      const binancePositions = binanceBalances
+        .filter(b => b.asset !== "USDT") // Ignorar cash
+        .map(b => {
+          const p = prices.find(p => p.symbol === `${b.asset}USDT`);
+          const price = p ? parseFloat(p.price) : 0;
+          return normalizeBinanceBalance(b, price);
+        })
+        .filter(p => p.market_value > 1); // Solo posiciones con valor > $1
+
+      return [...alpacaPositions, ...binancePositions];
+    }
+  } catch (e) {
+    console.warn("Error fetching Binance positions:", e);
+  }
+
+  return alpacaPositions;
 }
 
 async function fetchEquitySnapshots(): Promise<EquitySnapshot[]> {
@@ -133,7 +214,7 @@ export function usePortfolio(): UsePortfolioReturn {
   }));
 
   return {
-    account: accountQuery.data ?? null,
+    account: (accountQuery.data as AccountSummary) ?? null,
     positions,
     equitySnapshots: snapshotsQuery.data ?? [],
     isLoading,
