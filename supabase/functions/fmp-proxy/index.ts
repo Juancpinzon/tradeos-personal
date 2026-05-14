@@ -282,7 +282,7 @@ async function fetchYahooFinance(
   }
 
   // 2. Intentar Yahoo Finance
-  const modules = "financialData,defaultKeyStatistics,earningsTrend,summaryDetail"
+  const modules = "financialData,defaultKeyStatistics,earningsTrend,summaryDetail,calendarEvents,quoteType"
   const url = `${YAHOO_BASE}/${symbol}?modules=${modules}`
   console.log(`[Yahoo] Fetching ${url}`)
 
@@ -299,12 +299,17 @@ async function fetchYahooFinance(
 
     if (res.ok) {
       const body = await res.json()
+      // LOG DIAGNÓSTICO
+      console.log(`[Yahoo Body Sample]: ${JSON.stringify(body).substring(0, 1000)}`)
+
       const result = body.quoteSummary?.result?.[0]
       if (result) {
         const stats     = result.defaultKeyStatistics ?? {}
         const fin       = result.financialData        ?? {}
         const summary   = result.summaryDetail        ?? {}
         const trend     = result.earningsTrend?.trend?.[0] ?? {}
+        const calendar  = result.calendarEvents?.earnings  ?? {}
+        const qType     = result.quoteType            ?? {}
 
         const epsCurr    = stats.trailingEps?.raw ?? null
         const epsNextVal = trend.earningsEstimate?.avg?.raw ?? null
@@ -313,9 +318,8 @@ async function fetchYahooFinance(
         // Yahoo da revenue growth como 0.1234 → convertir a % (12.34)
         const revenueGrowth = fin.revenueGrowth?.raw ? fin.revenueGrowth.raw * 100 : null
 
-        // Earnings Date: Yahoo suele darlo en trend.endDate (ej: "2024-06-30")
-        // O en calendarEvents.earnings.earningsDate[0].fmt
-        const earningsDate = trend.endDate ?? null
+        // Próximos earnings: preferir calendarEvents (fecha exacta) sobre trend.endDate (fin de trimestre)
+        const earningsDate = calendar.earningsDate?.[0]?.fmt ?? trend.endDate ?? null
 
         const epsGrowthPct = epsNextVal && epsCurr && epsCurr !== 0
           ? ((epsNextVal - epsCurr) / Math.abs(epsCurr)) * 100
@@ -336,7 +340,7 @@ async function fetchYahooFinance(
           week_52_low:                summary.fiftyTwoWeekLow?.raw ?? null,
           price_change_pct_1d:        null, 
           volume:                     summary.volume?.raw ?? null,
-          name:                       symbol,
+          name:                       qType.longName ?? qType.shortName ?? symbol,
           fetched_at:                 new Date().toISOString(),
         }
         yahooOk = true

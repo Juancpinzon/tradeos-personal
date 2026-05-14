@@ -22,6 +22,7 @@ interface UseResearchReturn {
   currentSymbol: string | null
   history: ResearchEntry[]
   loadHistoryEntry: (entry: ResearchEntry) => void
+  deleteHistoryEntry: (id: string) => Promise<void>
   reset: () => void
 }
 
@@ -174,6 +175,24 @@ export function useResearch(): UseResearchReturn {
     setCurrentSymbol(null)
   }, [])
 
+  // ── deleteHistoryEntry ──────────────────────────────────────────────────
+  const deleteHistoryEntry = useCallback(async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('research_entries')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      
+      // Invalidar historial para refrescar la lista
+      await queryClient.invalidateQueries({ queryKey: ['research-history'] })
+    } catch (e) {
+      console.error('Error deleting research entry:', e)
+      alert('No se pudo eliminar el análisis')
+    }
+  }, [queryClient])
+
   return {
     analyzeSymbol,
     streamingText,
@@ -185,6 +204,7 @@ export function useResearch(): UseResearchReturn {
     currentSymbol,
     history,
     loadHistoryEntry,
+    deleteHistoryEntry,
     reset,
   }
 }

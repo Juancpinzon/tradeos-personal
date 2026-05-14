@@ -200,6 +200,7 @@ Deno.serve(async (req: Request) => {
     revenue_growth_pct:   fmpData?.revenue_growth_pct   ?? yahooData?.revenue_growth_pct   ?? null,
     pe_ratio:             fmpData?.pe_ratio          ?? yahooData?.pe_ratio          ?? null,
     next_earnings_date:   fmpData?.next_earnings_date ?? yahooData?.next_earnings_date ?? null,
+    name:                 fmpData?.name               ?? yahooData?.name               ?? sym,
     fetched_at:           new Date().toISOString(),
   }
 
@@ -363,7 +364,7 @@ function buildDataContext(
 
   const fundUnavailable = "No disponible vía datos técnicos"
 
-  return `Datos de ${symbol} al ${now.toLocaleDateString("es-CO")}:
+  return `Datos de ${snap.name || symbol} (${symbol}) al ${now.toLocaleDateString("es-CO")}:
 
 Precio: $${fmt(snap.price)} | Cambio 1d: ${fmtSign(snap.price_change_pct_1d)}%
 Dist. ATH (52w high): ${fmtSign(snap.ath_distance_pct)}%

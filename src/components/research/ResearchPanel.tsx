@@ -13,7 +13,7 @@ import { PortfolioContextPanel } from './PortfolioContextPanel'
 import { useResearch } from '../../hooks/useResearch'
 import type { ResearchEntry } from '../../types'
 import { formatDate } from '../../lib/formatters'
-import { RotateCcw, ExternalLink, Copy, Download } from 'lucide-react'
+import { RotateCcw, ExternalLink, Copy, Download, Trash2 } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Estilos de Markdown compartidos
@@ -98,9 +98,11 @@ function BlinkingCursor() {
 function HistoryPanel({
   entries,
   onSelect,
+  onDelete,
 }: {
   entries: ResearchEntry[]
   onSelect: (e: ResearchEntry) => void
+  onDelete: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
 
@@ -147,53 +149,100 @@ function HistoryPanel({
       {open && (
         <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {entries.map(entry => (
-            <button
+            <div
               key={entry.id}
-              onClick={() => onSelect(entry)}
               style={{
                 display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-default)',
-                borderRadius: '6px',
-                padding: '8px 12px',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'border-color 150ms',
-              }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-primary)'
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'
+                gap: '8px',
+                alignItems: 'stretch',
               }}
             >
-              <div>
-                <span
-                  style={{
-                    fontFamily: '"IBM Plex Mono", monospace',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    color: 'var(--color-primary)',
-                  }}
-                >
-                  {entry.symbol}
+              <button
+                onClick={() => onSelect(entry)}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'border-color 150ms',
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-primary)'
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span
+                      style={{
+                        fontFamily: '"IBM Plex Mono", monospace',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        color: 'var(--color-primary)',
+                      }}
+                    >
+                      {entry.symbol}
+                    </span>
+                    {entry.data_used?.name && entry.data_used.name !== entry.symbol && (
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>
+                        {entry.data_used.name}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {entry.query.length > 70 ? entry.query.slice(0, 70) + '…' : entry.query}
+                  </span>
+                </div>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', flexShrink: 0, marginLeft: '12px' }}>
+                  {formatDate(entry.created_at)}
                 </span>
-                <span
-                  style={{
-                    marginLeft: '10px',
-                    fontSize: '11px',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  {entry.query.length > 60 ? entry.query.slice(0, 60) + '…' : entry.query}
-                </span>
-              </div>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)', flexShrink: 0 }}>
-                {formatDate(entry.created_at)}
-              </span>
-            </button>
+              </button>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (confirm(`¿Eliminar análisis de ${entry.symbol}?`)) {
+                    onDelete(entry.id)
+                  }
+                }}
+                title="Eliminar análisis"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  borderRadius: '6px',
+                  padding: '0 10px',
+                  cursor: 'pointer',
+                  color: 'var(--color-loss)',
+                  transition: 'all 150ms',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'
+                  e.currentTarget.style.borderColor = 'var(--color-loss)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)'
+                }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -222,6 +271,7 @@ export function ResearchPanel() {
     currentSymbol,
     history,
     loadHistoryEntry,
+    deleteHistoryEntry,
     reset,
   } = useResearch()
 
@@ -498,7 +548,11 @@ export function ResearchPanel() {
             </div>
 
             {/* Historial */}
-            <HistoryPanel entries={history} onSelect={loadHistoryEntry} />
+            <HistoryPanel 
+              entries={history} 
+              onSelect={loadHistoryEntry} 
+              onDelete={deleteHistoryEntry} 
+            />
           </div>
 
           {/* Columna derecha — datos fuente sticky (30%) */}
@@ -547,16 +601,23 @@ export function ResearchPanel() {
                 >
                   <span>DATOS FUENTE</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span
-                      style={{
-                        fontFamily: '"IBM Plex Mono", monospace',
-                        color: 'var(--color-primary)',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {displaySymbol}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                      <span
+                        style={{
+                          fontFamily: '"IBM Plex Mono", monospace',
+                          color: 'var(--color-primary)',
+                          fontSize: '13px',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {displaySymbol}
+                      </span>
+                      {currentSnapshot?.name && currentSnapshot.name !== displaySymbol && (
+                        <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500, textAlign: 'right' }}>
+                          {currentSnapshot.name}
+                        </span>
+                      )}
+                    </div>
                     <a
                       href={`https://www.tradingview.com/chart/?symbol=${displaySymbol}`}
                       target="_blank"

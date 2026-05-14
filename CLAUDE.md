@@ -968,3 +968,147 @@ src/
 **Regla crítica:** No se puede importar el mismo archivo dos veces. Validar por filename + fecha en `import_sessions` antes de procesar.
 
 **Plantilla:** `public/template_historial.xlsx` generada on-demand con la librería xlsx.
+
+---
+
+## 🗓️ Fase 9: Plan de Vuelo Diario (agregada post-deploy)
+
+### Concepto
+El Plan de Vuelo es la pantalla de preparación pre-sesión. Se completa antes de la apertura del mercado y conecta automáticamente con el Screener, el Journal y las Estrategias. Elimina la fricción de pasar datos entre módulos manualmente.
+
+### Flujo completo integrado
+```
+Screener (domingo/lunes) → propone candidatos de la semana
+         ↓
+Plan de Vuelo (cada mañana antes 9:00 AM ET) → seleccionás los del día
+         ↓
+Journal pre-trade (al ejecutar orden) → tesis ya precargada desde el Plan
+         ↓
+Registro en tiempo real → operaciones del día
+         ↓
+Journal post-mortem → lección del día
+         ↓
+Plan de Vuelo siguiente día → muestra lección anterior automáticamente
+```
+
+### Nuevos componentes
+
+```
+src/
+├── components/flight-plan/
+│   ├── FlightPlanForm.tsx        # Formulario principal del plan diario
+│   ├── FlightPlanCandidates.tsx  # Tabla de hasta 3 candidatos del día
+│   ├── FlightPlanChecklist.tsx   # Checklist pre-apertura 9 puntos
+│   ├── FlightPlanRules.tsx       # Reglas irrompibles del día
+│   ├── FlightPlanSwing.tsx       # Posiciones swing abiertas + trailing stops
+│   └── FlightPlanSummary.tsx     # Cierre del día: PnL, lección, estado emocional
+├── hooks/
+│   └── useFlightPlan.ts          # CRUD del plan + integración con Journal/Screener
+└── pages/
+    └── FlightPlan.tsx            # Página principal /flight-plan
+```
+
+### Nueva migration: 010_flight_plan.sql
+
+```typescript
+interface FlightPlan {
+  id: string
+  user_id: string
+  date: Date                          // fecha de la sesión (unique por usuario)
+  market: 'NYSE' | 'crypto' | 'both' // mercado del día
+
+  // Contexto pre-sesión
+  spy_close_yesterday?: number
+  spy_trend_sma50?: 'above' | 'below' | 'at'
+  vix_level?: number
+  market_bias?: 'bullish' | 'bearish' | 'neutral'
+  pre_market_news?: string
+
+  // Candidatos del día (max 3) — vinculados a Screener
+  candidates: FlightPlanCandidate[]
+
+  // Reglas del día
+  max_daily_loss: number              // calculado: 3% del capital intradía
+  max_operations: number              // default: 3 NYSE + 2 cripto
+  stop_daily_triggered: boolean       // true si se alcanzó el stop diario
+
+  // Checklist
+  checklist_completed: boolean
+  checklist_items: Record<string, boolean>
+
+  // Cierre
+  pnl_total?: number
+  trades_won?: number
+  trades_lost?: number
+  followed_plan?: 'yes' | 'partial' | 'no'
+  daily_lesson?: string               // lección del día en 1 oración
+  emotional_state_close?: 'satisfied' | 'neutral' | 'frustrated' | 'anxious' | 'overexcited'
+
+  created_at: Date
+  updated_at: Date
+}
+
+interface FlightPlanCandidate {
+  symbol: string
+  setup_type: 'breakout' | 'pullback' | 'reversal' | 'earnings_play' | 'range'
+  current_price?: number
+  support_level?: number
+  stop_loss: number                   // obligatorio
+  target: number                      // obligatorio
+  risk_reward?: number                // calculado
+  qty_suggested?: number              // del Risk Calculator
+  capital_at_risk?: number            // calculado
+  entry_thesis: string                // 1 oración — por qué entrás
+  screener_result_id?: string         // FK → screener_results si viene del Screener
+  journal_entry_id?: string           // FK → journal_entries cuando se ejecuta
+  executed: boolean                   // true si se ejecutó la operación
+}
+```
+
+### Integraciones clave
+
+**Screener → Plan de Vuelo:**
+- Botón "Agregar al Plan de Vuelo" en cada fila de resultados del Screener
+- Los candidatos se precargan en FlightPlanCandidates con symbol, setup, stop, target
+- El usuario ajusta y confirma antes de guardar
+
+**Plan de Vuelo → Journal:**
+- Al ejecutar una orden desde Trading, el Journal pre-trade se precarga con:
+  - `entry_thesis` del candidato del Plan de Vuelo
+  - `planned_stop_loss` del candidato
+  - `planned_target` del candidato
+  - `setup_type` del candidato
+- El `journal_entry_id` se guarda en el `FlightPlanCandidate` para trazabilidad
+
+**Plan de Vuelo → Plan de Vuelo siguiente día:**
+- Al crear el Plan del día siguiente, se muestra automáticamente:
+  - Lección del día anterior (`daily_lesson`)
+  - Estado emocional de cierre del día anterior
+  - Posiciones swing abiertas actualizadas
+
+**PDF exportable:**
+- Botón "Exportar PDF" genera el Plan de Vuelo del día en formato
+  `TradeOS_Plan_de_Vuelo.pdf` — una página horizontal, listo para imprimir o ver en celular
+
+### Acceso en la app
+Nueva ruta: `/flight-plan`
+Nuevo ítem en Sidebar entre Journal y Screener: 📋 Plan de Vuelo → /flight-plan
+
+### Sidebar actualizado (8 rutas)
+```
+├── 📊 Dashboard        → /
+├── 📈 Trading          → /trading
+├── 🔍 Research         → /research
+├── 📓 Journal          → /journal
+├── 📋 Plan de Vuelo    → /flight-plan    ← NUEVA
+├── 🎯 Screener         → /screener
+├── 📋 Historial        → /history
+└── ⚙️  Settings        → /settings
+```
+
+### Reglas de código para esta fase
+- El Plan de Vuelo nunca ejecuta órdenes — solo prepara y propone
+- Un solo Plan de Vuelo por usuario por día (unique constraint en DB)
+- Los candidatos sin `journal_entry_id` se muestran como "pendientes" al cierre
+- El `daily_lesson` es obligatorio para marcar el plan como completado
+- El PDF se genera en el frontend con la librería `jspdf` + `html2canvas`
