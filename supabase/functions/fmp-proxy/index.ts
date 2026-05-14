@@ -46,10 +46,11 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl  = Deno.env.get("SUPABASE_URL")!
   const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!
   const supabaseSvc  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  const fmpKey  = Deno.env.get("FMP_API_KEY")
+  const fmpKey  = Deno.env.get("FMP_API_KEY")        // requerido solo por /fundamentals y /earnings-calendar
   const avKey   = Deno.env.get("ALPHA_VANTAGE_KEY")  // optional — 25 req/day free
 
-  if (!fmpKey) return err("FMP_API_KEY not configured", 500)
+  // ⚠️ No verificar fmpKey aquí — /finviz no lo necesita.
+  //    La verificación se hace dentro de cada handler que sí lo requiere.
 
   // Auth client — ANON_KEY + global.headers (ES256-compatible)
   const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
@@ -71,19 +72,22 @@ Deno.serve(async (req: Request) => {
     // GET /fundamentals/{symbol}
     // Devuelve quote + income statement + analyst estimates en un solo payload
     if (endpoint[0] === "fundamentals" && endpoint[1]) {
+      if (!fmpKey) return err("FMP_API_KEY not configured", 500)
       const symbol = endpoint[1].toUpperCase()
       return await getFundamentals(symbol, supabase, fmpKey, avKey ?? null)
     }
 
     // GET /earnings-calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
     if (endpoint[0] === "earnings-calendar") {
+      if (!fmpKey) return err("FMP_API_KEY not configured", 500)
       const from = url.searchParams.get("from") ?? new Date().toISOString().split("T")[0]
       const to   = url.searchParams.get("to") ?? addDays(new Date(), 30)
       return await getEarningsCalendar(from, to, fmpKey)
     }
 
     // GET /finviz/{symbol}
-    // Scraping de Finviz con fallback a Alpha Vantage si bloquea
+    // Scraping de Finviz con fallback a Alpha Vantage si bloquea.
+    // NO requiere FMP_API_KEY.
     if (endpoint[0] === "finviz" && endpoint[1]) {
       const symbol = endpoint[1].toUpperCase()
       return await fetchFinviz(symbol, supabase, avKey ?? null)
@@ -265,7 +269,7 @@ function addDays(date: Date, days: number): string {
 function parseFinvizHtml(html: string): Record<string, string> {
   const result: Record<string, string> = {}
 
-  // Extraer solo el bloque de la snapshot-table2 para acelerar el parsing
+  // Extraer solo el bloque de la snapshot-table2
   const tableMatch = html.match(/<table[^>]*class="[^"]*snapshot-table2[^"]*"[^>]*>([\s\S]*?)<\/table>/i)
   if (!tableMatch) {
     console.warn("[Finviz] snapshot-table2 not found in HTML")
@@ -277,24 +281,26 @@ function parseFinvizHtml(html: string): Record<string, string> {
   const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi
   let tdMatch: RegExpExecArray | null
 
-  // Buffer: las celdas vienen en pares (label | value) alternados en la misma fila
-  // Finviz usa una fila con múltiples <td>: label, value, label, value...
-  const cells: string[] = []
   while ((tdMatch = tdRegex.exec(tableHtml)) !== null) {
-    // Limpiar etiquetas HTML y normalizar espacios
-    const raw = tdMatch[1]
-      .replace(/<[^>]+>/g, " ")  // quitar todas las tags
+    const tdContent = tdMatch[1]
+    
+    // Buscar el label dentro del div
+    const labelMatch = tdContent.match(/<div[^>]*>([\s\S]*?)<\/div>/i)
+    if (!labelMatch) continue
+
+    const label = labelMatch[1].replace(/<[^>]+>/g, " ").trim()
+    
+    // El valor es lo que queda después del div
+    const valueRaw = tdContent.replace(labelMatch[0], "")
+    const value = valueRaw
+      .replace(/<[^>]+>/g, " ")  // quitar tags <b>, <span>, etc.
       .replace(/&nbsp;/g, " ")
       .replace(/\s+/g, " ")
       .trim()
-    cells.push(raw)
-  }
 
-  // Las celdas vienen en pares: cells[i] = label, cells[i+1] = value
-  for (let i = 0; i + 1 < cells.length; i += 2) {
-    const label = cells[i].trim()
-    const value = cells[i + 1].trim()
-    if (label) result[label] = value
+    if (label) {
+      result[label] = value
+    }
   }
 
   return result
