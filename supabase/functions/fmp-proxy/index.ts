@@ -255,23 +255,34 @@ async function fetchAlphaVantage(
   supabase: ReturnType<typeof createClient>,
   avKey: string,
 ) {
-  const url = `${AV_BASE}?function=OVERVIEW&symbol=${symbol}&apikey=${avKey}`
-  console.log(`[AV] Fetching OVERVIEW for ${symbol}`)
+  console.log(`[AV] Fetching OVERVIEW + GLOBAL_QUOTE for ${symbol}`)
 
-  const res  = await fetch(url)
-  const body = await res.text()
+  // Llamar en paralelo para minimizar latencia
+  const [overviewRes, quoteRes] = await Promise.all([
+    fetch(`${AV_BASE}?function=OVERVIEW&symbol=${symbol}&apikey=${avKey}`),
+    fetch(`${AV_BASE}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${avKey}`),
+  ])
+
+  const [overviewBody, quoteBody] = await Promise.all([
+    overviewRes.text(),
+    quoteRes.text(),
+  ])
 
   let av: Record<string, string>
+  let gq: Record<string, string>
+
   try {
-    av = JSON.parse(body)
+    av = JSON.parse(overviewBody)
+    const gqRaw = JSON.parse(quoteBody)
+    gq = gqRaw["Global Quote"] ?? {}
   } catch {
-    console.error("[AV] JSON parse error:", body.slice(0, 200))
+    console.error("[AV] JSON parse error")
     return json({ source: "alpha_vantage", data: null }, 502)
   }
 
   // Alpha Vantage returns {"Note": "..."} or {"Information": "..."} on rate-limit
   if (!av.Symbol || av.Note || av.Information) {
-    console.warn("[AV] Rate-limited or empty response:", body.slice(0, 200))
+    console.warn("[AV] Rate-limited or empty response:", overviewBody.slice(0, 200))
     return json({ source: "alpha_vantage", data: null }, 429)
   }
 
@@ -279,6 +290,12 @@ async function fetchAlphaVantage(
     const v = parseFloat(av[key] ?? "")
     return isNaN(v) ? null : v
   }
+
+  // GLOBAL_QUOTE campos: "05. price", "09. change", "10. change percent", "06. volume"
+  const currentPrice        = parseFloat(gq["05. price"] ?? "") || null
+  const changePctRaw        = gq["10. change percent"]?.replace("%", "") ?? ""
+  const priceChangePct1d    = parseFloat(changePctRaw) || null
+  const currentVolume       = parseFloat(gq["06. volume"] ?? "") || null
 
   const payload = {
     symbol,
@@ -289,12 +306,12 @@ async function fetchAlphaVantage(
     pe_ratio:                   n("PERatio"),
     next_earnings_date:         av.NextEarningsDate ?? null,
     next_earnings_estimate_eps: n("ForwardEPS"),
-    price:                      n("AnalystTargetPrice"),  // best available; real price from Alpaca
+    price:                      currentPrice,
     market_cap:                 n("MarketCapitalization"),
     week_52_high:               n("52WeekHigh"),
     week_52_low:                n("52WeekLow"),
-    price_change_pct_1d:        null,
-    volume:                     null,
+    price_change_pct_1d:        priceChangePct1d,
+    volume:                     currentVolume,
     name:                       av.Name ?? symbol,
     fetched_at:                 new Date().toISOString(),
   }

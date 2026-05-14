@@ -179,16 +179,9 @@ export default function Dashboard() {
   const [doctorOpen, setDoctorOpen] = useState(false)
   const navigate = useNavigate()
 
-  if (isLoading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
-        <SyncSpinner />
-        <span style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }}>Cargando portafolio...</span>
-      </div>
-    )
-  }
-
-  if (error || !account) {
+  // Nunca bloquear el render con spinner de página completa.
+  // Cada sección muestra su propio skeleton mientras carga.
+  if (error && !account) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1rem', padding: '2rem' }}>
         <div style={{
@@ -217,14 +210,18 @@ export default function Dashboard() {
     <>
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Portfolio Summary */}
-      <PortfolioSummary
-        equity={account.equity}
-        cash={account.cash}
-        buying_power={account.buying_power}
-        pnl_today={account.pnl_today}
-        pnl_today_pct={account.pnl_today_pct}
-        isSyncing={isSyncing}
-      />
+      {isLoading || !account ? (
+        <SkeletonSummary />
+      ) : (
+        <PortfolioSummary
+          equity={account.equity}
+          cash={account.cash}
+          buying_power={account.buying_power}
+          pnl_today={account.pnl_today}
+          pnl_today_pct={account.pnl_today_pct}
+          isSyncing={isSyncing}
+        />
+      )}
 
       {/* Contenido principal: dos columnas */}
       <div
@@ -279,7 +276,9 @@ export default function Dashboard() {
           </div>
 
           {/* Lista de posiciones */}
-          {positions.length === 0 ? (
+          {isLoading ? (
+            <SkeletonPositions />
+          ) : positions.length === 0 ? (
             <p style={{ padding: '2rem 0', color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center' }}>
               Sin posiciones abiertas
             </p>
@@ -419,5 +418,56 @@ function SyncSpinner() {
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
     </svg>
+  )
+}
+
+// ── Skeleton loaders ────────────────────────────────────────────────────────
+
+const shimmerStyle: React.CSSProperties = {
+  background: 'linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-hover,#1e2535) 50%, var(--bg-elevated) 75%)',
+  backgroundSize: '200% 100%',
+  animation: 'skeletonShimmer 1.5s infinite',
+  borderRadius: '4px',
+}
+
+function SkeletonSummary() {
+  return (
+    <div style={{
+      padding: '1.25rem 1.5rem',
+      borderBottom: '1px solid var(--border-subtle)',
+      backgroundColor: 'var(--bg-surface)',
+    }}>
+      <style>{`@keyframes skeletonShimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`}</style>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        <div>
+          <div style={{ ...shimmerStyle, width: '80px', height: '11px', marginBottom: '8px' }} />
+          <div style={{ ...shimmerStyle, width: '180px', height: '32px' }} />
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ ...shimmerStyle, width: '60px', height: '11px', marginBottom: '8px', marginLeft: 'auto' }} />
+          <div style={{ ...shimmerStyle, width: '120px', height: '22px' }} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '2rem' }}>
+        <div style={{ ...shimmerStyle, width: '90px', height: '14px' }} />
+        <div style={{ ...shimmerStyle, width: '110px', height: '14px' }} />
+        <div style={{ ...shimmerStyle, width: '80px', height: '14px' }} />
+      </div>
+    </div>
+  )
+}
+
+function SkeletonPositions() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '8px' }}>
+      {[1, 2, 3].map(i => (
+        <div key={i} style={{
+          ...shimmerStyle,
+          height: '72px',
+          borderRadius: '8px',
+          border: '1px solid var(--border-subtle)',
+        }} />
+      ))}
+    </div>
   )
 }

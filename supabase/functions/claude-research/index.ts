@@ -41,6 +41,7 @@ Deno.serve(async (req: Request) => {
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY")
   const alpacaKey    = Deno.env.get("ALPACA_API_KEY")
   const alpacaSecret = Deno.env.get("ALPACA_SECRET_KEY")
+  const avKey        = Deno.env.get("ALPHA_VANTAGE_KEY")  // fallback técnico
 
   if (!anthropicKey) return errJson("ANTHROPIC_API_KEY not configured", 500)
 
@@ -77,13 +78,13 @@ Deno.serve(async (req: Request) => {
   const fromStr = from.toISOString().split("T")[0]
   const toStr   = now.toISOString().split("T")[0]
 
-  const [barsResult, fmpResult, positionResult, portfolioResult, accountResult, quoteResult] = await Promise.allSettled([
-    // Técnicos (Alpaca)
-    fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/bars/${sym}?timeframe=1Week&limit=30`, {
+  const [barsResult, fmpResult, positionResult, portfolioResult, accountResult, quoteResult, avWeeklyResult] = await Promise.allSettled([
+    // Técnicos (Alpaca) — si no responde, usamos AV como fallback
+    fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/bars/${sym}?timeframe=1Week&limit=60`, {
       headers: { Authorization: authHeader },
     }).then(r => r.json()),
-    
-    // Fundamentales (FMP Proxy)
+
+    // Fundamentales (FMP Proxy → AV fallback interno)
     fetch(`${supabaseUrl}/functions/v1/fmp-proxy/fundamentals/${sym}`, {
       headers: { Authorization: authHeader },
     }).then(r => r.json()).catch(() => null),
@@ -103,10 +104,37 @@ Deno.serve(async (req: Request) => {
     fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/quote/${sym}`, {
       headers: { Authorization: authHeader },
     }).then(r => r.json()).catch(() => null),
+
+    // Alpha Vantage weekly series — fallback técnico si Alpaca no tiene barras
+    avKey
+      ? fetch(`https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=${sym}&apikey=${avKey}`)
+          .then(r => r.json()).catch(() => null)
+      : Promise.resolve(null),
   ])
 
   const barsResultData = barsResult.status === "fulfilled" ? barsResult.value : null
-  const bars: Bar[] = barsResultData?.bars || []
+  let bars: Bar[] = barsResultData?.bars || []
+
+  // ── Fallback técnico con Alpha Vantage cuando Alpaca no tiene barras suficientes ────────────
+  const avWeeklyRaw = avWeeklyResult.status === "fulfilled" ? avWeeklyResult.value : null
+  if (bars.length < 15 && avWeeklyRaw && avWeeklyRaw["Weekly Adjusted Time Series"]) {
+    const weeklyTs = avWeeklyRaw["Weekly Adjusted Time Series"] as Record<string, Record<string, string>>
+    const avBars: Bar[] = Object.entries(weeklyTs)
+      .sort(([a], [b]) => a.localeCompare(b))  // cronológico asc
+      .slice(-60)
+      .map(([date, v]) => ({
+        t: date,
+        o: parseFloat(v["1. open"] ?? "0"),
+        h: parseFloat(v["2. high"] ?? "0"),
+        l: parseFloat(v["3. low"]  ?? "0"),
+        c: parseFloat(v["5. adjusted close"] ?? v["4. close"] ?? "0"),
+        v: parseFloat(v["6. volume"] ?? "0"),
+      }))
+    if (avBars.length >= 15) {
+      console.log(`[AV BARS] Using ${avBars.length} weekly bars from Alpha Vantage for ${sym}`)
+      bars = avBars
+    }
+  }
 
   const fmpData = fmpResult.status === "fulfilled" ? fmpResult.value?.data : null
 

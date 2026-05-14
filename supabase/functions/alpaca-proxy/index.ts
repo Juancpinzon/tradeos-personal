@@ -118,12 +118,15 @@ Deno.serve(async (req: Request) => {
       const lastEquity = parseFloat(data.last_equity ?? data.equity ?? "0");
       const pnlToday = equity - lastEquity;
 
-      await adminClient.from("equity_snapshots").insert({
+      // Fire-and-forget: no bloquea la respuesta al cliente
+      adminClient.from("equity_snapshots").insert({
         user_id: userId,
         broker: "alpaca",
         equity,
         cash,
         buying_power: buyingPower,
+      }).then(({ error }) => {
+        if (error) console.error("[account] equity_snapshots insert error:", error.message);
       });
 
       return jsonResponse({
