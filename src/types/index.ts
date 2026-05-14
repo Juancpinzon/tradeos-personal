@@ -143,6 +143,7 @@ export interface ResearchDataSnapshot {
   revenue_growth_pct?: number;
   pe_ratio?: number;
   next_earnings_date?: string;
+  name?: string;
   fetched_at: string;
 }
 
