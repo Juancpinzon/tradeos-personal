@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ScreenerCriteria, ScreenerResult, ScreenerPreset } from '../types';
+import type { ScreenerCriteria, ScreenerResult } from '../types';
 
 interface ScreenerState {
   activeCriteria: ScreenerCriteria;

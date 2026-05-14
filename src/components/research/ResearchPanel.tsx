@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { KpiGrid } from './KpiGrid'
 import { TradingViewWidget } from './TradingViewWidget'
@@ -274,6 +275,15 @@ export function ResearchPanel() {
     deleteHistoryEntry,
     reset,
   } = useResearch()
+
+  const [searchParams] = useSearchParams()
+
+  useEffect(() => {
+    const sym = searchParams.get('symbol')
+    if (sym) {
+      setSymbolInput(sym.toUpperCase())
+    }
+  }, [searchParams])
 
   // Auto-scroll al final mientras llega el stream
   useEffect(() => {

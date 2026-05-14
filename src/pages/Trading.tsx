@@ -8,7 +8,7 @@
 
 import { useState, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { RefreshCw, TrendingUp, TrendingDown, Clock } from 'lucide-react'
+import { Clock } from 'lucide-react'
 import OrderForm from '../components/trading/OrderForm'
 import ConfirmOrderModal from '../components/trading/ConfirmOrderModal'
 import OrderHistory from '../components/trading/OrderHistory'
@@ -16,14 +16,10 @@ import { WatchlistPanel } from '../components/watchlist/WatchlistPanel'
 import { useOrders } from '../hooks/useOrders'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useWatchlist } from '../hooks/useWatchlist'
-import { useAuth } from '../hooks/useAuth'
-import { formatCurrency, formatPercent } from '../lib/formatters'
 import type { OrderDraft } from '../components/trading/OrderForm'
 import type { UserSettings } from '../types'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Trading page principal
-// ─────────────────────────────────────────────────────────────────────────────
+import { useSettings } from '../hooks/useSettings'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trading page principal
@@ -40,6 +36,18 @@ export default function Trading() {
   const { orders, isLoading: ordersLoading, submitOrder, isSubmitting, cancelOrder } = useOrders()
   const { account, positions } = usePortfolio()
   const { items: watchlistItems } = useWatchlist()
+  const { data: settings } = useSettings()
+
+  const userSettings: UserSettings = settings || {
+    id: 'loading',
+    alpaca_mode: 'paper',
+    live_trading_enabled: false,
+    default_broker: 'alpaca',
+    risk_per_trade_pct: 2,
+    max_position_size_pct: 15,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
 
   // Precio actual del símbolo seleccionado
   const selectedWatchItem = useMemo(() => 
@@ -52,12 +60,6 @@ export default function Trading() {
   const currentPosition = positions.find(p => p.symbol === selectedSymbol)
   const portfolioWeightAtOrder = currentPosition?.portfolio_weight_pct ?? null
 
-  // ── Handler: watchlist click ──────────────────────────────────────────────
-  const handleSelectSymbol = useCallback((symbol: string) => {
-    setSelectedSymbol(symbol)
-    setPendingDraft(null)
-    setSubmitError(null)
-  }, [])
 
   // ── Handler: OrderForm → review ────────────────────────────────────────────
   const handleReviewOrder = useCallback((draft: OrderDraft) => {
@@ -166,7 +168,7 @@ export default function Trading() {
             initialSymbol={selectedSymbol}
             currentPrice={currentPrice}
             totalEquity={account?.equity ?? 0}
-            userSettings={DEFAULT_SETTINGS}
+            userSettings={userSettings}
             onReviewOrder={handleReviewOrder}
           />
 
@@ -204,7 +206,7 @@ export default function Trading() {
           draft={pendingDraft}
           totalEquity={account?.equity ?? 0}
           portfolioWeightAtOrder={portfolioWeightAtOrder}
-          userSettings={DEFAULT_SETTINGS}
+          userSettings={userSettings}
           isSubmitting={isSubmitting}
           onConfirm={handleConfirmOrder}
           onCancel={handleCancelModal}

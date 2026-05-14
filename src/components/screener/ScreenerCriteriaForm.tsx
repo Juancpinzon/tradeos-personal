@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useScreenerStore } from '../../stores/screenerStore';
 import { useScreener } from '../../hooks/useScreener';
-import { Search, Save, Play, ChevronDown, Info } from 'lucide-react';
+import { Search, Save, Play } from 'lucide-react';
 
 export function ScreenerCriteriaForm() {
   const { activeCriteria, setCriteria, isRunning } = useScreenerStore();

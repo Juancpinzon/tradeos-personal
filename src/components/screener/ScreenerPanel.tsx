@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { ScreenerCriteriaForm } from './ScreenerCriteriaForm';
 import { ScreenerResultsTable } from './ScreenerResultsTable';
 import { useScreener } from '../../hooks/useScreener';
-import { Layers, Zap, Info, Loader2 } from 'lucide-react';
+import { Layers, Zap } from 'lucide-react';
 
 export function ScreenerPanel() {
   const { 
@@ -11,7 +11,8 @@ export function ScreenerPanel() {
     presets, 
     getPresets, 
     loadPreset, 
-    activePresetId 
+    activePresetId,
+    savePreset
   } = useScreener();
 
   useEffect(() => {

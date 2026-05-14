@@ -6,7 +6,7 @@ interface Props {
   item: WatchlistItem;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (id: string, above: number | null, below: number | null) => void;
+  onSave: (data: { id: string; above: number | null; below: number | null }) => void;
 }
 
 export function AlertConfigModal({ item, isOpen, onClose, onSave }: Props) {
@@ -16,11 +16,11 @@ export function AlertConfigModal({ item, isOpen, onClose, onSave }: Props) {
   if (!isOpen) return null;
 
   const handleSave = () => {
-    onSave(
-      item.id,
-      above ? parseFloat(above) : null,
-      below ? parseFloat(below) : null
-    );
+    onSave({
+      id: item.id,
+      above: above ? parseFloat(above) : null,
+      below: below ? parseFloat(below) : null
+    });
     onClose();
   };
 

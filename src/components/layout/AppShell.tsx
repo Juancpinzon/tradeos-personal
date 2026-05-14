@@ -3,7 +3,7 @@
 // Layout: Sidebar fijo a la izquierda + área de contenido con scroll
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import { useAuth } from '../../hooks/useAuth'

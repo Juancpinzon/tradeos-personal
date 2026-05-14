@@ -1,26 +1,53 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { Key, Shield, ShieldAlert, Save, Eye, EyeOff, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Key, Shield, ShieldAlert, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Upload, FileText } from 'lucide-react';
+import ImporterModal from '../components/importer/ImporterModal';
+
+interface ImportSession {
+  id: string;
+  filename: string;
+  total_rows: number;
+  imported_rows: number;
+  status: string;
+  created_at: string;
+}
 
 export default function Settings() {
   const { user } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  
+
   // API Keys state
   const [alpacaKeys, setAlpacaKeys] = useState({ key: '', secret: '', show: false });
   const [binanceKeys, setBinanceKeys] = useState({ key: '', secret: '', show: false });
   const [alpacaStatus, setAlpacaStatus] = useState<'none' | 'loading' | 'valid' | 'error'>('none');
   const [binanceStatus, setBinanceStatus] = useState<'none' | 'loading' | 'valid' | 'error'>('none');
 
+  // Importer state
+  const [importerOpen, setImporterOpen] = useState(false);
+  const [importSessions, setImportSessions] = useState<ImportSession[]>([]);
+
   useEffect(() => {
-    if (user) fetchSettings();
+    if (user) {
+      fetchSettings();
+      fetchImportSessions();
+    }
   }, [user]);
 
+  const fetchImportSessions = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('import_sessions')
+      .select('id, filename, total_rows, imported_rows, status, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    if (data) setImportSessions(data as ImportSession[]);
+  };
+
   const fetchSettings = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('user_settings')
       .select('*')
       .eq('id', user?.id)
@@ -31,7 +58,6 @@ export default function Settings() {
   };
 
   const saveSettings = async (updates: any) => {
-    setSaving(true);
     const { error } = await supabase
       .from('user_settings')
       .update(updates)
@@ -40,7 +66,6 @@ export default function Settings() {
     if (!error) {
       setSettings({ ...settings, ...updates });
     }
-    setSaving(false);
   };
 
   const handleSaveApiKeys = async (broker: 'alpaca' | 'binance') => {
@@ -224,6 +249,95 @@ export default function Settings() {
           </div>
         </section>
 
+        {/* Import History Section */}
+        <section style={cardStyle}>
+          <div style={cardHeaderStyle}>
+            <Upload size={18} color="var(--color-primary)" />
+            <h2 style={cardTitleStyle}>Importar historial de operaciones</h2>
+          </div>
+
+          <div style={sectionContentStyle}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '240px' }}>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '0.5rem' }}>
+                  Cargá operaciones previas desde Excel para alimentar el Journal con datos reales.
+                </p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Formato: <span style={{ fontFamily: '"IBM Plex Mono", monospace' }}>Ticker | Movimiento | Cantidad | Precio | Fecha</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setImporterOpen(true)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                  padding: '0.5rem 1.125rem',
+                  borderRadius: '0.375rem',
+                  border: '1px solid var(--color-primary)',
+                  backgroundColor: 'rgba(59,130,246,0.08)',
+                  color: 'var(--color-primary)',
+                  fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
+                  fontFamily: '"Syne", sans-serif', whiteSpace: 'nowrap',
+                  transition: 'background-color 120ms',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.18)')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.08)')}
+              >
+                <FileText size={14} /> Importar desde Excel
+              </button>
+            </div>
+
+            {importSessions.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
+                  Importaciones anteriores
+                </p>
+                {importSessions.map(session => (
+                  <div
+                    key={session.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '0.625rem 0.875rem',
+                      borderRadius: '0.375rem',
+                      backgroundColor: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-subtle)',
+                      gap: '1rem', flexWrap: 'wrap',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', minWidth: 0 }}>
+                      <FileText size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      <span style={{
+                        fontSize: '0.8125rem', color: 'var(--text-secondary)',
+                        fontFamily: '"IBM Plex Mono", monospace',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '260px',
+                      }}>
+                        {session.filename}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {session.imported_rows}/{session.total_rows} filas
+                      </span>
+                      <span style={{
+                        fontSize: '0.625rem', fontWeight: 700,
+                        padding: '0.15rem 0.45rem', borderRadius: '0.25rem',
+                        backgroundColor: session.status === 'completed' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                        border: `1px solid ${session.status === 'completed' ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`,
+                        color: session.status === 'completed' ? '#10b981' : '#ef4444',
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                      }}>
+                        {session.status === 'completed' ? 'OK' : session.status}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {new Date(session.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Trading Mode Section */}
         <section style={{ ...cardStyle, borderLeft: settings?.alpaca_mode === 'live' ? '4px solid var(--color-loss)' : '1px solid var(--border-default)' }}>
           <div style={cardHeaderStyle}>
@@ -279,6 +393,15 @@ export default function Settings() {
           </div>
         </section>
       </div>
+
+      {importerOpen && (
+        <ImporterModal
+          onClose={() => {
+            setImporterOpen(false);
+            fetchImportSessions();
+          }}
+        />
+      )}
     </div>
   );
 }
