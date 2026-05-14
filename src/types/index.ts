@@ -286,6 +286,7 @@ export interface ScreenerCriteria {
   exclude_dividends?: boolean;
   sector?: string;
   asset_class: "equity" | "crypto" | "both";
+  symbol_query?: string; // Búsqueda por símbolo o nombre
 }
 
 export interface ScreenerPreset {

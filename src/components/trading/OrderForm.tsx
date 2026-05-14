@@ -53,12 +53,17 @@ export default function OrderForm({
   const [target, setTarget] = useState('')
   const [errors, setErrors] = useState<ValidationErrors>({})
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [companyName, setCompanyName] = useState('')
   const { suggestions, isLoading: isSearching } = useSymbolSearch(symbol)
 
   // Sync symbol si cambia desde afuera (watchlist click)
   useEffect(() => {
     if (initialSymbol) setSymbol(initialSymbol.toUpperCase())
   }, [initialSymbol])
+
+  useEffect(() => {
+    if (!symbol) setCompanyName('')
+  }, [symbol])
 
   // Auto-cálculo de stop sugerido cuando cambia qty, precio o dirección
   useEffect(() => {
@@ -209,6 +214,7 @@ export default function OrderForm({
                   className="search-suggestion-item"
                   onClick={() => {
                     setSymbol(s.symbol)
+                    setCompanyName(s.name)
                     setShowSuggestions(false)
                   }}
                 >
@@ -220,10 +226,18 @@ export default function OrderForm({
           )}
 
           {errors.symbol && <span className="form-error">{errors.symbol}</span>}
-          {currentPrice && (
-            <span className="form-hint font-mono">
-              Precio actual: ${currentPrice.toFixed(2)}
-            </span>
+          
+          {(companyName || currentPrice) && (
+            <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                {companyName}
+              </span>
+              {currentPrice && (
+                <span className="form-hint font-mono" style={{ margin: 0 }}>
+                  ${currentPrice.toFixed(2)}
+                </span>
+              )}
+            </div>
           )}
         </div>
 

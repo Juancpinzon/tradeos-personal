@@ -60,6 +60,10 @@ Deno.serve(async (req: Request) => {
   // ── Step A: Query screener_universe ─────────────────────────────────────────
   let query = supabase.from("screener_universe").select("*")
 
+  if (criteria.symbol_query) {
+    query = query.or(`symbol.ilike.%${criteria.symbol_query}%,name.ilike.%${criteria.symbol_query}%`)
+  }
+
   if (criteria.market_cap_min) {
     query = query.gte("market_cap", criteria.market_cap_min)
   }

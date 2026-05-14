@@ -112,6 +112,19 @@ export function ScreenerCriteriaForm() {
         flexDirection: 'column',
         gap: '20px'
       }}>
+        {/* Búsqueda por Nombre/Símbolo */}
+        <div style={sectionStyle}>
+          <label style={labelStyle}>Símbolo o Nombre</label>
+          <input
+            type="text"
+            name="symbol_query"
+            placeholder="Ej: AAPL, Apple..."
+            value={activeCriteria.symbol_query || ''}
+            onChange={handleChange}
+            style={inputStyle}
+          />
+        </div>
+
         {/* Market Cap */}
         <div style={sectionStyle}>
           <label style={labelStyle}>Market Cap Mín.</label>

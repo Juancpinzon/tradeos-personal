@@ -284,6 +284,7 @@ function HistoryPanel({
 export function ResearchPanel() {
   const [symbolInput, setSymbolInput] = useState('')
   const [queryInput, setQueryInput] = useState('')
+  const [selectedName, setSelectedName] = useState('')
   const analysisRef = useRef<HTMLDivElement>(null)
   const symbolRef = useRef<HTMLInputElement>(null)
 
@@ -339,6 +340,10 @@ export function ResearchPanel() {
       setSymbolInput(sym.toUpperCase())
     }
   }, [searchParams])
+
+  useEffect(() => {
+    if (!symbolInput) setSelectedName('')
+  }, [symbolInput])
 
   // Auto-scroll al final mientras llega el stream
   useEffect(() => {
@@ -408,6 +413,7 @@ export function ResearchPanel() {
                   style={suggestionItemStyle}
                   onClick={() => {
                     setSymbolInput(s.symbol)
+                    setSelectedName(s.name)
                     setShowSuggestions(false)
                   }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
@@ -417,6 +423,12 @@ export function ResearchPanel() {
                   <span style={{ fontSize: '11px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {selectedName && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, padding: '2px 4px', fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
+              {selectedName}
             </div>
           )}
         </div>

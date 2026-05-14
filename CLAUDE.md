@@ -758,8 +758,85 @@ Alpaca data:      sin límite   → cache 60s para precio, 1h para técnicos
 Anthropic API:    sin límite fijo → prompts concisos con datos pre-estructurados
 Screener sync:    1 vez al día → cron Supabase, nunca en cada screener run
 ```
+---
+
+## 🚨 Reglas de Código
+
+### SIEMPRE:
+- TypeScript strict — `noImplicitAny` en todo el proyecto
+- Acceso a Supabase solo desde hooks en `src/hooks/`; nunca en componentes directamente
+- Formatear con `formatCurrency()`, `formatPercent()`, `formatDate()`, `formatQty()` de `lib/formatters.ts`
+- Precios en `font-mono`; positivo `text-emerald-400`, negativo `text-red-400`
+- Toda Edge Function con `try/catch` + `toast` de error para el usuario
+- Edge Functions: validación de JWT de Supabase como primer paso antes de cualquier lógica
+- Prompt de `claude-research`: incluir `ResearchDataSnapshot` completo + `PortfolioContext` antes de la pregunta
+- Prompt de `claude-screener`: incluir portafolio actual para que Claude identifique qué complementa las posiciones
+- Prompt de `claude-portfolio-doctor`: incluir todas las posiciones + fundamentales cacheados de cada una
+- Respetar TTLs: 60s precios, 1h técnicos, 24h fundamentales FMP
+- `RiskCalculator` siempre calcula desde `user_settings.risk_per_trade_pct` y `max_position_size_pct`
+
+### NUNCA:
+- API keys en el frontend o en tablas de Supabase
+- Ejecutar órdenes sin `ConfirmOrderModal`
+- Llamadas directas a APIs externas desde el cliente
+- `any` en TypeScript sin comentario explicativo
+- Estado local para datos de la DB (usar React Query)
+- `live_trading_enabled: true` hardcodeado en ninguna parte
+- Mostrar análisis de Research sin panel de datos fuente visible
+- Mostrar resultados de Screener sin score y nota de Claude por ítem
+- Llamar a FMP sin revisar el cache de 24h primero
+- Correr `screener-universe-sync` en cada ejecución del screener
 
 ---
+
+## 📋 Comandos de Desarrollo
+
+```bash
+# Setup inicial
+npm create vite@latest tradeos-personal -- --template react-ts
+cd tradeos-personal
+npm install
+
+# Dev
+npm run dev
+
+# Supabase local
+supabase start
+supabase functions serve alpaca-proxy --env-file .env.local
+supabase functions serve fmp-proxy --env-file .env.local
+supabase functions serve claude-research --env-file .env.local
+supabase functions serve claude-screener --env-file .env.local
+supabase functions serve claude-portfolio-doctor --env-file .env.local
+
+# Test de Edge Function
+curl -i --location --request POST \
+  'http://localhost:54321/functions/v1/claude-research' \
+  --header 'Authorization: Bearer <SUPABASE_ANON_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{"symbol":"AAPL","query":"¿Conviene mantener?"}'
+
+# Migrations
+supabase db push
+
+# Deploy
+vercel --prod
+```
+
+---
+
+## 🔮 Roadmap Futuro (no construir ahora)
+
+- **Live trading**: activar `live_trading_enabled` (requiere cuenta real Alpaca + auditoría de seguridad)
+- **Screener push matutino**: cron que notifica cuando preset encuentra oportunidades nuevas
+- **Journal analytics avanzados**: correlación entre emotional_state y win rate; heatmap de errores por setup type
+- **Backtesting**: probar estrategias con datos históricos de Alpaca
+- **Alertas de precio en tiempo real**: WebSocket Alpaca + browser notifications
+- **Lightweight Charts**: reemplazar embed TradingView por charts nativos con datos propios
+- **Portfolio analytics cuantitativos**: Sharpe ratio, max drawdown, beta vs SPY, correlación activos
+- **Estrategias automatizadas**: reglas if/then para órdenes programáticas (paper only primero)
+- **Mobile PWA**: versión táctil optimizada
+- **Multi-usuario SaaS**: RLS ya está en Supabase; habilitar registro público
+
 
 ## 🚀 Orden de Construcción para Claude Code
 
@@ -844,84 +921,15 @@ Screener sync:    1 vez al día → cron Supabase, nunca en cada screener run
 - [ ] Deploy en Vercel con todas las variables configuradas
 - [ ] **Criterio de éxito**: Screener corre sobre universo cacheado → resultados puntuados → navegación a Research funciona
 
----
+### Fase 7: Alertas de precio + Watchlist completa
 
-## 🚨 Reglas de Código
-
-### SIEMPRE:
-- TypeScript strict — `noImplicitAny` en todo el proyecto
-- Acceso a Supabase solo desde hooks en `src/hooks/`; nunca en componentes directamente
-- Formatear con `formatCurrency()`, `formatPercent()`, `formatDate()`, `formatQty()` de `lib/formatters.ts`
-- Precios en `font-mono`; positivo `text-emerald-400`, negativo `text-red-400`
-- Toda Edge Function con `try/catch` + `toast` de error para el usuario
-- Edge Functions: validación de JWT de Supabase como primer paso antes de cualquier lógica
-- Prompt de `claude-research`: incluir `ResearchDataSnapshot` completo + `PortfolioContext` antes de la pregunta
-- Prompt de `claude-screener`: incluir portafolio actual para que Claude identifique qué complementa las posiciones
-- Prompt de `claude-portfolio-doctor`: incluir todas las posiciones + fundamentales cacheados de cada una
-- Respetar TTLs: 60s precios, 1h técnicos, 24h fundamentales FMP
-- `RiskCalculator` siempre calcula desde `user_settings.risk_per_trade_pct` y `max_position_size_pct`
-
-### NUNCA:
-- API keys en el frontend o en tablas de Supabase
-- Ejecutar órdenes sin `ConfirmOrderModal`
-- Llamadas directas a APIs externas desde el cliente
-- `any` en TypeScript sin comentario explicativo
-- Estado local para datos de la DB (usar React Query)
-- `live_trading_enabled: true` hardcodeado en ninguna parte
-- Mostrar análisis de Research sin panel de datos fuente visible
-- Mostrar resultados de Screener sin score y nota de Claude por ítem
-- Llamar a FMP sin revisar el cache de 24h primero
-- Correr `screener-universe-sync` en cada ejecución del screener
-
----
-
-## 📋 Comandos de Desarrollo
-
-```bash
-# Setup inicial
-npm create vite@latest tradeos-personal -- --template react-ts
-cd tradeos-personal
-npm install
-
-# Dev
-npm run dev
-
-# Supabase local
-supabase start
-supabase functions serve alpaca-proxy --env-file .env.local
-supabase functions serve fmp-proxy --env-file .env.local
-supabase functions serve claude-research --env-file .env.local
-supabase functions serve claude-screener --env-file .env.local
-supabase functions serve claude-portfolio-doctor --env-file .env.local
-
-# Test de Edge Function
-curl -i --location --request POST \
-  'http://localhost:54321/functions/v1/claude-research' \
-  --header 'Authorization: Bearer <SUPABASE_ANON_KEY>' \
-  --header 'Content-Type: application/json' \
-  --data '{"symbol":"AAPL","query":"¿Conviene mantener?"}'
-
-# Migrations
-supabase db push
-
-# Deploy
-vercel --prod
-```
-
----
-
-## 🔮 Roadmap Futuro (no construir ahora)
-
-- **Live trading**: activar `live_trading_enabled` (requiere cuenta real Alpaca + auditoría de seguridad)
-- **Screener push matutino**: cron que notifica cuando preset encuentra oportunidades nuevas
-- **Journal analytics avanzados**: correlación entre emotional_state y win rate; heatmap de errores por setup type
-- **Backtesting**: probar estrategias con datos históricos de Alpaca
-- **Alertas de precio en tiempo real**: WebSocket Alpaca + browser notifications
-- **Lightweight Charts**: reemplazar embed TradingView por charts nativos con datos propios
-- **Portfolio analytics cuantitativos**: Sharpe ratio, max drawdown, beta vs SPY, correlación activos
-- **Estrategias automatizadas**: reglas if/then para órdenes programáticas (paper only primero)
-- **Mobile PWA**: versión táctil optimizada
-- **Multi-usuario SaaS**: RLS ya está en Supabase; habilitar registro público
+- [ ] Migration `010`: `watchlist_items` con `alert_price_above` y `alert_price_below`
+- [ ] Hook `useWatchlist`: CRUD completo de items vinculados a `user_id`
+- [ ] `WatchlistPanel.tsx`: Lista persistente con polling de precios (vía cache)
+- [ ] Integración: Click en watchlist → Trading/Research con símbolo activo
+- [ ] Alertas visuales: Highlight en la fila si el precio cruza el umbral configurado
+- [ ] Seed data: Watchlist por defecto (AAPL, MSFT, NVDA, TSLA, SPY, BTC, ETH)
+- [ ] **Criterio de éxito**: Watchlist se sincroniza entre dispositivos → Alertas visuales funcionan al cargar precios nuevos
 
 ---
 
