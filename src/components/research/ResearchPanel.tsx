@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { KpiGrid } from './KpiGrid'
 import { TradingViewWidget } from './TradingViewWidget'
 import { PortfolioContextPanel } from './PortfolioContextPanel'
@@ -15,64 +16,62 @@ import { formatDate } from '../../lib/formatters'
 import { RotateCcw, ExternalLink, Copy, Download } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sección headers con emoji — Syne 600 12px uppercase tracking-wider
+// Estilos de Markdown compartidos
 // ─────────────────────────────────────────────────────────────────────────────
-const SECTION_HEADERS = [
-  '📊 CUADRO DE MANDO',
-  '📈 TESIS DE INVERSIÓN',
-  '📉 ANÁLISIS FUNDAMENTAL',
-  '💼 TU EXPOSICIÓN',
-  '⚠️ RIESGOS',
-  '📐 NIVELES TÉCNICOS',
-  '📅 PRÓXIMO CATALIZADOR',
-]
+const MD_HEADING_STYLE: React.CSSProperties = {
+  fontFamily: 'Syne, system-ui, sans-serif',
+  fontWeight: 600,
+  fontSize: '11px',
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase',
+  color: 'var(--color-primary)',
+  marginTop: '20px',
+  marginBottom: '8px',
+  paddingBottom: '4px',
+  borderBottom: '1px solid var(--border-subtle)',
+}
 
 function renderAnalysis(text: string, isStreaming: boolean) {
-  const lines = text.split('\n')
-
   return (
     <div style={{ fontSize: '13px', lineHeight: '1.7', color: 'var(--text-primary)' }}>
-      {lines.map((line, i) => {
-        const isSectionHeader = SECTION_HEADERS.some(h => {
-      const prefix = h.split(' ')[0]
-      return prefix !== undefined && line.trim().startsWith(prefix)
-    })
-        const isLast = i === lines.length - 1
-
-        if (isSectionHeader) {
-          return (
-            <div
-              key={i}
-              style={{
-                fontFamily: 'Syne, system-ui, sans-serif',
-                fontWeight: 600,
-                fontSize: '11px',
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                color: 'var(--color-primary)',
-                marginTop: i === 0 ? 0 : '20px',
-                marginBottom: '8px',
-                paddingBottom: '4px',
-                borderBottom: '1px solid var(--border-subtle)',
-              }}
-            >
-              {line}
-            </div>
-          )
-        }
-
-        if (line.trim() === '') {
-          return <div key={i} style={{ height: '6px' }} />
-        }
-
-        return (
-          <div key={i} style={{ marginBottom: '2px' }}>
-            {line}
-            {isLast && isStreaming && <BlinkingCursor />}
-          </div>
-        )
-      })}
-      {!text.endsWith('\n') && isStreaming && lines.length === 0 && <BlinkingCursor />}
+      <ReactMarkdown
+        components={{
+          h1: ({ children }) => <div style={MD_HEADING_STYLE}>{children}</div>,
+          h2: ({ children }) => <div style={MD_HEADING_STYLE}>{children}</div>,
+          h3: ({ children }) => <div style={{ ...MD_HEADING_STYLE, marginTop: '16px' }}>{children}</div>,
+          strong: ({ children }) => (
+            <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{children}</strong>
+          ),
+          em: ({ children }) => (
+            <em style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>{children}</em>
+          ),
+          p: ({ children }) => (
+            <p style={{ marginBottom: '6px', marginTop: 0 }}>{children}</p>
+          ),
+          ul: ({ children }) => (
+            <ul style={{ paddingLeft: '18px', marginBottom: '8px', marginTop: '4px' }}>{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol style={{ paddingLeft: '18px', marginBottom: '8px', marginTop: '4px' }}>{children}</ol>
+          ),
+          li: ({ children }) => (
+            <li style={{ marginBottom: '3px' }}>{children}</li>
+          ),
+          code: ({ children }) => (
+            <code style={{
+              background: 'var(--bg-elevated)',
+              borderRadius: '3px',
+              padding: '1px 5px',
+              fontSize: '12px',
+              fontFamily: '"IBM Plex Mono", monospace',
+              color: 'var(--color-primary)',
+            }}>{children}</code>
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+      {isStreaming && <BlinkingCursor />}
     </div>
   )
 }
@@ -370,6 +369,96 @@ export function ResearchPanel() {
           ⚠️ {error}
         </div>
       )}
+      {/* ── Barra de acciones — siempre visible cuando hay resultado ───────── */}
+      {hasResult && !isLoading && !isStreaming && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flexShrink: 0,
+          }}
+        >
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(streamingText)
+              alert('Análisis copiado al portapapeles')
+            }}
+            style={{
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-default)',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              cursor: 'pointer',
+              color: 'var(--text-secondary)',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 150ms',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
+          >
+            <Copy size={14} /> Copiar
+          </button>
+
+          <button
+            onClick={() => {
+              const element = document.createElement('a')
+              const file = new Blob([streamingText], { type: 'text/plain' })
+              element.href = URL.createObjectURL(file)
+              element.download = `research_${currentSymbol || 'analysis'}.txt`
+              document.body.appendChild(element)
+              element.click()
+              document.body.removeChild(element)
+            }}
+            style={{
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-default)',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              cursor: 'pointer',
+              color: 'var(--text-secondary)',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 150ms',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
+          >
+            <Download size={14} /> Descargar
+          </button>
+
+          <button
+            onClick={() => {
+              reset()
+              setSymbolInput('')
+              setQueryInput('')
+              setTimeout(() => symbolRef.current?.focus(), 0)
+            }}
+            style={{
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-default)',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              cursor: 'pointer',
+              color: 'var(--text-secondary)',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 150ms',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
+          >
+            <RotateCcw size={14} /> Nuevo Análisis
+          </button>
+        </div>
+      )}
 
       {/* ── Layout dos columnas ────────────────────────────────────────────── */}
       {hasResult || isLoading ? (
@@ -400,103 +489,6 @@ export function ResearchPanel() {
                 minHeight: '200px',
               }}
             >
-              {/* Toolbar de acciones (Copiar / Descargar / Nuevo) */}
-              {(hasResult || error) && !isLoading && !isStreaming && (
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    alignItems: 'center',
-                    gap: '10px',
-                    marginBottom: '16px',
-                    paddingBottom: '12px',
-                    borderBottom: '1px solid var(--border-subtle)',
-                  }}
-                >
-                  {hasResult && (
-                    <>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(streamingText)
-                          alert('Análisis copiado al portapapeles')
-                        }}
-                        style={{
-                          background: 'var(--bg-elevated)',
-                          border: '1px solid var(--border-default)',
-                          borderRadius: '6px',
-                          padding: '6px 12px',
-                          cursor: 'pointer',
-                          color: 'var(--text-secondary)',
-                          fontSize: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          transition: 'all 150ms',
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
-                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
-                      >
-                        <Copy size={14} /> Copiar
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          const element = document.createElement("a");
-                          const file = new Blob([streamingText], {type: 'text/plain'});
-                          element.href = URL.createObjectURL(file);
-                          element.download = `research_${currentSymbol || 'analysis'}.txt`;
-                          document.body.appendChild(element);
-                          element.click();
-                          document.body.removeChild(element);
-                        }}
-                        style={{
-                          background: 'var(--bg-elevated)',
-                          border: '1px solid var(--border-default)',
-                          borderRadius: '6px',
-                          padding: '6px 12px',
-                          cursor: 'pointer',
-                          color: 'var(--text-secondary)',
-                          fontSize: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          transition: 'all 150ms',
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
-                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
-                      >
-                        <Download size={14} /> Descargar
-                      </button>
-                    </>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      reset()
-                      setSymbolInput('')
-                      setQueryInput('')
-                      setTimeout(() => symbolRef.current?.focus(), 0)
-                    }}
-                    style={{
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border-default)',
-                      borderRadius: '6px',
-                      padding: '6px 12px',
-                      cursor: 'pointer',
-                      color: 'var(--text-secondary)',
-                      fontSize: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      transition: 'all 150ms',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
-                  >
-                    <RotateCcw size={14} /> Nuevo Análisis
-                  </button>
-                </div>
-              )}
 
               {isLoading && !hasResult ? (
                 <SkeletonLoader />

@@ -8,6 +8,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const FMP_BASE = "https://financialmodelingprep.com/api/v3"
+const AV_BASE  = "https://www.alphavantage.co/query"
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000  // 24 horas
 
 function json(data: unknown, status = 200) {
@@ -41,7 +42,8 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl  = Deno.env.get("SUPABASE_URL")!
   const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!
   const supabaseSvc  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  const fmpKey       = Deno.env.get("FMP_API_KEY")
+  const fmpKey  = Deno.env.get("FMP_API_KEY")
+  const avKey   = Deno.env.get("ALPHA_VANTAGE_KEY")  // optional — 25 req/day free
 
   if (!fmpKey) return err("FMP_API_KEY not configured", 500)
 
@@ -66,7 +68,7 @@ Deno.serve(async (req: Request) => {
     // Devuelve quote + income statement + analyst estimates en un solo payload
     if (endpoint[0] === "fundamentals" && endpoint[1]) {
       const symbol = endpoint[1].toUpperCase()
-      return await getFundamentals(symbol, supabase, fmpKey)
+      return await getFundamentals(symbol, supabase, fmpKey, avKey ?? null)
     }
 
     // GET /earnings-calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -91,6 +93,7 @@ async function getFundamentals(
   symbol: string,
   supabase: ReturnType<typeof createClient>,
   fmpKey: string,
+  avKey: string | null = null,
 ) {
   // 1. Revisar cache
   const { data: cached } = await supabase
@@ -154,6 +157,13 @@ async function getFundamentals(
 
   if (!quote) {
     console.warn(`[FMP DIAGNOSTIC] No quote found for ${symbol}. Full Body:`, quoteRaw);
+
+    // ── Alpha Vantage fallback ─────────────────────────────────────────────
+    if (avKey) {
+      console.log(`[AV FALLBACK] Trying Alpha Vantage for ${symbol}`);
+      return await fetchAlphaVantage(symbol, supabase, avKey)
+    }
+
     return json({ source: "fmp", data: null }, 404)
   }
 
@@ -233,4 +243,81 @@ function addDays(date: Date, days: number): string {
   const d = new Date(date)
   d.setDate(d.getDate() + days)
   return d.toISOString().split("T")[0]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fetchAlphaVantage — fallback cuando FMP no devuelve datos
+// Campos: EPS, PERatio, ForwardPE, RevenueTTM, 52WeekHigh, 52WeekLow
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function fetchAlphaVantage(
+  symbol: string,
+  supabase: ReturnType<typeof createClient>,
+  avKey: string,
+) {
+  const url = `${AV_BASE}?function=OVERVIEW&symbol=${symbol}&apikey=${avKey}`
+  console.log(`[AV] Fetching OVERVIEW for ${symbol}`)
+
+  const res  = await fetch(url)
+  const body = await res.text()
+
+  let av: Record<string, string>
+  try {
+    av = JSON.parse(body)
+  } catch {
+    console.error("[AV] JSON parse error:", body.slice(0, 200))
+    return json({ source: "alpha_vantage", data: null }, 502)
+  }
+
+  // Alpha Vantage returns {"Note": "..."} or {"Information": "..."} on rate-limit
+  if (!av.Symbol || av.Note || av.Information) {
+    console.warn("[AV] Rate-limited or empty response:", body.slice(0, 200))
+    return json({ source: "alpha_vantage", data: null }, 429)
+  }
+
+  const n = (key: string) => {
+    const v = parseFloat(av[key] ?? "")
+    return isNaN(v) ? null : v
+  }
+
+  const payload = {
+    symbol,
+    eps_current:                n("EPS"),
+    eps_next_estimate:          n("ForwardEPS"),
+    eps_growth_next_pct:        null,               // not available in OVERVIEW
+    revenue_growth_pct:         null,               // not available in OVERVIEW
+    pe_ratio:                   n("PERatio"),
+    next_earnings_date:         av.NextEarningsDate ?? null,
+    next_earnings_estimate_eps: n("ForwardEPS"),
+    price:                      n("AnalystTargetPrice"),  // best available; real price from Alpaca
+    market_cap:                 n("MarketCapitalization"),
+    week_52_high:               n("52WeekHigh"),
+    week_52_low:                n("52WeekLow"),
+    price_change_pct_1d:        null,
+    volume:                     null,
+    name:                       av.Name ?? symbol,
+    fetched_at:                 new Date().toISOString(),
+  }
+
+  // Upsert to cache (same schema as FMP path)
+  await supabase.from("fundamentals_cache").upsert({
+    symbol,
+    eps_current:                payload.eps_current,
+    eps_next_estimate:          payload.eps_next_estimate,
+    eps_growth_next_pct:        payload.eps_growth_next_pct,
+    revenue_growth_pct:         payload.revenue_growth_pct,
+    pe_ratio:                   payload.pe_ratio,
+    next_earnings_date:         payload.next_earnings_date,
+    next_earnings_estimate_eps: payload.next_earnings_estimate_eps,
+    price:                      payload.price,
+    market_cap:                 payload.market_cap,
+    week_52_high:               payload.week_52_high,
+    week_52_low:                payload.week_52_low,
+    price_change_pct_1d:        payload.price_change_pct_1d,
+    volume:                     payload.volume,
+    name:                       payload.name,
+    fetched_at:                 new Date().toISOString(),
+  })
+
+  return json({ source: "alpha_vantage", data: payload })
 }
