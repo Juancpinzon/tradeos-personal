@@ -704,6 +704,67 @@ CRITERIO DE ÉXITO:
 
 ---
 
+FASE 7 — Alertas de precio + Watchlist completa
+
+Lee CLAUDE.md completo antes de escribir cualquier línea.
+
+Fases 1-6 completadas.
+
+TAREA:
+
+1. Migration 010_watchlist.sql:
+   CREATE TABLE public.watchlist_items (
+   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+   symbol text NOT NULL,
+   broker text NOT NULL DEFAULT 'alpaca',
+   asset_class text NOT NULL DEFAULT 'equity',
+   alert_price_above numeric,
+   alert_price_below numeric,
+   notes text,
+   added_at timestamptz NOT NULL DEFAULT now(),
+   UNIQUE(user_id, symbol)
+   );
+   ALTER TABLE public.watchlist_items ENABLE ROW LEVEL SECURITY;
+   CREATE POLICY "Users manage own watchlist"
+   ON public.watchlist_items FOR ALL USING (auth.uid() = user_id);
+
+2. Seed data automático al crear cuenta:
+   Insertar watchlist default: AAPL, MSFT, NVDA, TSLA, SPY (equity)
+   BTC/USDT, ETH/USDT (crypto)
+
+3. Crear src/hooks/useWatchlist.ts:
+   - CRUD completo de watchlist_items
+   - getWatchlistWithPrices(): combina items con precios actuales
+     de market_data_cache o alpaca-proxy /quote
+   - checkAlerts(): para cada item con alert_price_above/below,
+     comparar con precio actual y disparar toast si se cruza el nivel
+   - React Query con refetch cada 30s
+
+4. Crear src/components/watchlist/WatchlistPanel.tsx:
+   Lista de símbolos con precio actual, cambio % del día, bid/ask
+   Botón "+" para agregar símbolo
+   Botón de alerta por ítem (campana) → abre modal de configuración
+   Click en símbolo → precarga en OrderForm si está en /trading
+   Click en símbolo → precarga en Research si está en /research
+
+5. Crear src/components/watchlist/AlertConfigModal.tsx:
+   Inputs: alert_price_above y alert_price_below
+   Preview: "Alerta si AAPL sube sobre $X o baja de $Y"
+   Botón guardar → actualiza watchlist_items
+
+6. Integrar checkAlerts() en useMarketData.ts:
+   Cada vez que se refrescan precios, verificar alertas
+   Toast de alerta con símbolo, dirección y precio actual
+   Color: verde si cruza hacia arriba, rojo si cruza hacia abajo
+
+7. Actualizar Trading.tsx:
+   Panel derecho: WatchlistPanel en lugar de lista estática
+   Precios en tiempo real desde useWatchlist
+
+CRITERIO DE ÉXITO:
+✓ Wa
+
 ## FASE 8 — Importador de Historial desde Excel
 
 ```
@@ -807,7 +868,7 @@ TAREA — Ejecutá la Fase 8 en este orden:
 
 5. Crear src/hooks/useImporter.ts:
    Estado del importador: step, parsedTrades, validTrades, errors, progress
-   
+
    Función importTrades(trades: ParsedTrade[], options: ImportOptions):
    - Procesa en lotes de 10 para no saturar Supabase
    - Por cada trade válido:
