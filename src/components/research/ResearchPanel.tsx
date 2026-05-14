@@ -668,7 +668,40 @@ export function ResearchPanel() {
           </div>
         </div>
       ) : (
-        <EmptyState />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <EmptyState />
+          </div>
+          
+          {history.length > 0 && (
+            <div style={{ 
+              maxWidth: '800px', 
+              width: '100%', 
+              margin: '0 auto', 
+              padding: '0 20px 40px 20px',
+            }}>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: 600,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'var(--text-muted)',
+                fontFamily: 'Syne, system-ui, sans-serif',
+                marginBottom: '16px',
+                textAlign: 'center',
+                borderBottom: '1px solid var(--border-subtle)',
+                paddingBottom: '8px',
+              }}>
+                Análisis Recientes
+              </div>
+              <HistoryPanel 
+                entries={history} 
+                onSelect={loadHistoryEntry} 
+                onDelete={deleteHistoryEntry} 
+              />
+            </div>
+          )}
+        </div>
       )}
 
       {/* Keyframes globales — inyectados inline una vez */}
