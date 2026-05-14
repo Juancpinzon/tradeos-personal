@@ -12,6 +12,7 @@ import { KpiGrid } from './KpiGrid'
 import { TradingViewWidget } from './TradingViewWidget'
 import { PortfolioContextPanel } from './PortfolioContextPanel'
 import { useResearch } from '../../hooks/useResearch'
+import { useSymbolSearch } from '../../hooks/useSymbolSearch'
 import type { ResearchEntry } from '../../types'
 import { formatDate } from '../../lib/formatters'
 import { RotateCcw, ExternalLink, Copy, Download, Trash2 } from 'lucide-react'
@@ -100,10 +101,12 @@ function HistoryPanel({
   entries,
   onSelect,
   onDelete,
+  onDeleteAll,
 }: {
   entries: ResearchEntry[]
   onSelect: (e: ResearchEntry) => void
   onDelete: (id: string) => void
+  onDeleteAll: () => void
 }) {
   const [open, setOpen] = useState(false)
 
@@ -117,35 +120,58 @@ function HistoryPanel({
         paddingTop: '12px',
       }}
     >
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          color: 'var(--text-secondary)',
-          fontSize: '11px',
-          fontFamily: 'Syne, system-ui, sans-serif',
-          fontWeight: 600,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          padding: 0,
-        }}
-      >
-        <span
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button
+          onClick={() => setOpen(o => !o)}
           style={{
-            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
-            transition: 'transform 150ms ease',
-            display: 'inline-block',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text-secondary)',
+            fontSize: '11px',
+            fontFamily: 'Syne, system-ui, sans-serif',
+            fontWeight: 600,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            padding: 0,
           }}
         >
-          ›
-        </span>
-        Análisis anteriores ({entries.length})
-      </button>
+          <span
+            style={{
+              transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 150ms ease',
+              display: 'inline-block',
+            }}
+          >
+            ›
+          </span>
+          Análisis anteriores ({entries.length})
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDeleteAll()
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--color-loss)',
+            fontSize: '10px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            opacity: 0.7,
+            transition: 'opacity 150ms'
+          }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+          onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
+        >
+          ELIMINAR TODO
+        </button>
+      </div>
 
       {open && (
         <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -261,6 +287,31 @@ export function ResearchPanel() {
   const analysisRef = useRef<HTMLDivElement>(null)
   const symbolRef = useRef<HTMLInputElement>(null)
 
+  const dropdownStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 'calc(100% + 4px)',
+    left: 0,
+    right: 0,
+    background: 'var(--bg-surface)',
+    border: '1px solid var(--border-default)',
+    borderRadius: '6px',
+    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+    zIndex: 100,
+    maxHeight: '200px',
+    overflowY: 'auto',
+    width: '240px'
+  }
+
+  const suggestionItemStyle: React.CSSProperties = {
+    padding: '8px 12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    cursor: 'pointer',
+    transition: 'background 120ms',
+    borderBottom: '1px solid var(--border-subtle)',
+  }
+
   const {
     analyzeSymbol,
     streamingText,
@@ -273,8 +324,12 @@ export function ResearchPanel() {
     history,
     loadHistoryEntry,
     deleteHistoryEntry,
+    deleteAllHistory,
     reset,
   } = useResearch()
+
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const { suggestions } = useSymbolSearch(symbolInput)
 
   const [searchParams] = useSearchParams()
 
@@ -320,9 +375,14 @@ export function ResearchPanel() {
             ref={symbolRef}
             type="text"
             value={symbolInput}
-            onChange={e => setSymbolInput(e.target.value.toUpperCase())}
-            placeholder="AAPL"
-            maxLength={10}
+            onChange={e => {
+              setSymbolInput(e.target.value.toUpperCase())
+              setShowSuggestions(true)
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            placeholder="Símbolo..."
+            maxLength={20}
             style={{
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border-default)',
@@ -332,14 +392,33 @@ export function ResearchPanel() {
               fontSize: '14px',
               fontFamily: '"IBM Plex Mono", monospace',
               fontWeight: 700,
-              width: '100px',
+              width: '140px',
               outline: 'none',
               letterSpacing: '0.06em',
               transition: 'border-color 150ms',
             }}
-            onFocus={e => { e.target.style.borderColor = 'var(--color-primary)' }}
-            onBlur={e => { e.target.style.borderColor = 'var(--border-default)' }}
           />
+          
+          {/* Suggestions Dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div style={dropdownStyle}>
+              {suggestions.map(s => (
+                <div 
+                  key={s.symbol} 
+                  style={suggestionItemStyle}
+                  onClick={() => {
+                    setSymbolInput(s.symbol)
+                    setShowSuggestions(false)
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--color-primary)', fontSize: '12px' }}>{s.symbol}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Query */}
@@ -562,6 +641,7 @@ export function ResearchPanel() {
               entries={history} 
               onSelect={loadHistoryEntry} 
               onDelete={deleteHistoryEntry} 
+              onDeleteAll={deleteAllHistory}
             />
           </div>
 
@@ -708,6 +788,7 @@ export function ResearchPanel() {
                 entries={history} 
                 onSelect={loadHistoryEntry} 
                 onDelete={deleteHistoryEntry} 
+                onDeleteAll={deleteAllHistory}
               />
             </div>
           )}

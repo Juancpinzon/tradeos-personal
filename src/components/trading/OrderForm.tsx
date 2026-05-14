@@ -6,8 +6,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useMemo } from 'react'
-import { ChevronDown, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react'
+import { ChevronDown, TrendingUp, TrendingDown, AlertTriangle, Loader2 } from 'lucide-react'
 import RiskCalculator from './RiskCalculator'
+import { useSymbolSearch } from '../../hooks/useSymbolSearch'
 import { formatCurrency, formatPercent } from '../../lib/formatters'
 import type { UserSettings } from '../../types'
 
@@ -51,6 +52,8 @@ export default function OrderForm({
   const [stopLoss, setStopLoss] = useState('')
   const [target, setTarget] = useState('')
   const [errors, setErrors] = useState<ValidationErrors>({})
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const { suggestions, isLoading: isSearching } = useSymbolSearch(symbol)
 
   // Sync symbol si cambia desde afuera (watchlist click)
   useEffect(() => {
@@ -172,17 +175,50 @@ export default function OrderForm({
 
       <div className="order-form__body">
         {/* Symbol */}
-        <div className="form-field">
-          <label className="form-label" htmlFor="of-symbol">SÍMBOLO</label>
-          <input
-            id="of-symbol"
-            className={`input-base input-mono ${errors.symbol ? 'input-error' : ''}`}
-            value={symbol}
-            onChange={e => { setSymbol(e.target.value.toUpperCase()); setErrors(p => ({ ...p, symbol: undefined })) }}
-            placeholder="AAPL"
-            spellCheck={false}
-            autoCapitalize="characters"
-          />
+        <div className="form-field" style={{ position: 'relative' }}>
+          <label className="form-label" htmlFor="of-symbol">SÍMBOLO / NOMBRE</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              id="of-symbol"
+              className={`input-base input-mono ${errors.symbol ? 'input-error' : ''}`}
+              value={symbol}
+              onChange={e => { 
+                setSymbol(e.target.value.toUpperCase())
+                setErrors(p => ({ ...p, symbol: undefined }))
+                setShowSuggestions(true)
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+              placeholder="AAPL o Apple..."
+              spellCheck={false}
+              autoCapitalize="characters"
+            />
+            {isSearching && (
+              <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
+                <Loader2 size={14} className="animate-spin" color="var(--text-muted)" />
+              </div>
+            )}
+          </div>
+
+          {/* Suggestions Dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="search-suggestions">
+              {suggestions.map(s => (
+                <div 
+                  key={s.symbol} 
+                  className="search-suggestion-item"
+                  onClick={() => {
+                    setSymbol(s.symbol)
+                    setShowSuggestions(false)
+                  }}
+                >
+                  <span className="suggestion-symbol">{s.symbol}</span>
+                  <span className="suggestion-name">{s.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           {errors.symbol && <span className="form-error">{errors.symbol}</span>}
           {currentPrice && (
             <span className="form-hint font-mono">
@@ -547,6 +583,46 @@ export default function OrderForm({
         }
         .btn-sell:hover {
           background: rgba(239, 68, 68, 0.22);
+        }
+        .search-suggestions {
+          position: absolute;
+          top: calc(100% + 4px);
+          left: 0;
+          right: 0;
+          background: var(--bg-surface);
+          border: 1px solid var(--border-default);
+          border-radius: 6px;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+          z-index: 100;
+          max-height: 200px;
+          overflow-y: auto;
+        }
+        .search-suggestion-item {
+          padding: 8px 12px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          cursor: pointer;
+          transition: background 120ms;
+          border-bottom: 1px solid var(--border-subtle);
+        }
+        .search-suggestion-item:last-child { border-bottom: none; }
+        .search-suggestion-item:hover {
+          background: var(--bg-hover);
+        }
+        .suggestion-symbol {
+          font-family: "IBM Plex Mono", monospace;
+          font-weight: 700;
+          font-size: 0.8rem;
+          color: var(--color-primary);
+          min-width: 50px;
+        }
+        .suggestion-name {
+          font-size: 0.75rem;
+          color: var(--text-secondary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
       `}</style>
     </div>

@@ -23,6 +23,7 @@ interface UseResearchReturn {
   history: ResearchEntry[]
   loadHistoryEntry: (entry: ResearchEntry) => void
   deleteHistoryEntry: (id: string) => Promise<void>
+  deleteAllHistory: () => Promise<void>
   reset: () => void
 }
 
@@ -185,11 +186,32 @@ export function useResearch(): UseResearchReturn {
 
       if (error) throw error
       
-      // Invalidar historial para refrescar la lista
       await queryClient.invalidateQueries({ queryKey: ['research-history'] })
     } catch (e) {
       console.error('Error deleting research entry:', e)
       alert('No se pudo eliminar el análisis')
+    }
+  }, [queryClient])
+
+  // ── deleteAllHistory ──────────────────────────────────────────────────
+  const deleteAllHistory = useCallback(async () => {
+    if (!confirm('¿Estás seguro de que quieres eliminar TODO el historial de investigación? Esta acción no se puede deshacer.')) return
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user?.id) return
+
+      const { error } = await supabase
+        .from('research_entries')
+        .delete()
+        .eq('user_id', session.user.id)
+
+      if (error) throw error
+      
+      await queryClient.invalidateQueries({ queryKey: ['research-history'] })
+    } catch (e) {
+      console.error('Error deleting research history:', e)
+      alert('No se pudo limpiar el historial')
     }
   }, [queryClient])
 
@@ -205,6 +227,7 @@ export function useResearch(): UseResearchReturn {
     history,
     loadHistoryEntry,
     deleteHistoryEntry,
+    deleteAllHistory,
     reset,
   }
 }
