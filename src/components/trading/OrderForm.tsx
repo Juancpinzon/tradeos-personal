@@ -5,153 +5,175 @@
 // Botón "Revisar orden" abre ConfirmOrderModal. NUNCA ejecuta directamente.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useMemo } from 'react'
-import { ChevronDown, TrendingUp, TrendingDown, AlertTriangle, Loader2 } from 'lucide-react'
-import RiskCalculator from './RiskCalculator'
-import { useSymbolSearch } from '../../hooks/useSymbolSearch'
-import { useFlightPlan } from '../../hooks/useFlightPlan'
-import { formatCurrency, formatPercent } from '../../lib/formatters'
-import type { UserSettings } from '../../types'
+import { useState, useEffect, useMemo } from "react";
+import {
+  ChevronDown,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Loader2,
+} from "lucide-react";
+import RiskCalculator from "./RiskCalculator";
+import { useSymbolSearch } from "../../hooks/useSymbolSearch";
+import { useFlightPlan } from "../../hooks/useFlightPlan";
+import { formatCurrency, formatPercent } from "../../lib/formatters";
+import type { UserSettings } from "../../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface OrderDraft {
-  symbol: string
-  side: 'buy' | 'sell'
-  order_type: 'market' | 'limit' | 'stop' | 'stop_limit'
-  qty: number
-  limit_price: number | null
-  stop_loss: number | null
-  target: number | null
-  estimated_price: number | null
+  symbol: string;
+  side: "buy" | "sell";
+  order_type: "market" | "limit" | "stop" | "stop_limit";
+  qty: number;
+  limit_price: number | null;
+  stop_loss: number | null;
+  target: number | null;
+  estimated_price: number | null;
 }
 
 interface OrderFormProps {
-  initialSymbol?: string
-  currentPrice?: number | null
-  totalEquity: number
-  userSettings: UserSettings
-  onReviewOrder: (draft: OrderDraft) => void
+  initialSymbol?: string;
+  currentPrice?: number | null;
+  totalEquity: number;
+  userSettings: UserSettings;
+  onReviewOrder: (draft: OrderDraft) => void;
 }
 
-type ValidationErrors = Partial<Record<keyof OrderDraft, string>>
+type ValidationErrors = Partial<Record<keyof OrderDraft, string>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function OrderForm({
-  initialSymbol = '',
+  initialSymbol = "",
   currentPrice = null,
   totalEquity,
   userSettings,
   onReviewOrder,
 }: OrderFormProps) {
-  const [symbol, setSymbol] = useState(initialSymbol.toUpperCase())
-  const [side, setSide] = useState<'buy' | 'sell'>('buy')
-  const [orderType, setOrderType] = useState<OrderDraft['order_type']>('market')
-  const [qty, setQty] = useState('')
-  const [limitPrice, setLimitPrice] = useState('')
-  const [stopLoss, setStopLoss] = useState('')
-  const [target, setTarget] = useState('')
-  const [errors, setErrors] = useState<ValidationErrors>({})
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [companyName, setCompanyName] = useState('')
-  const [assetClass, setAssetClass] = useState<'equity' | 'crypto'>('equity')
-  const { suggestions, isLoading: isSearching } = useSymbolSearch(symbol)
-  const { plan } = useFlightPlan()
+  const [symbol, setSymbol] = useState(initialSymbol.toUpperCase());
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [orderType, setOrderType] =
+    useState<OrderDraft["order_type"]>("market");
+  const [qty, setQty] = useState("");
+  const [limitPrice, setLimitPrice] = useState("");
+  const [stopLoss, setStopLoss] = useState("");
+  const [target, setTarget] = useState("");
+  const [errors, setErrors] = useState<ValidationErrors>({});
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [assetClass, setAssetClass] = useState<"equity" | "crypto">("equity");
+  const { suggestions, isLoading: isSearching } = useSymbolSearch(symbol);
+  const { plan } = useFlightPlan();
 
   // Sync symbol si cambia desde afuera (watchlist click)
   useEffect(() => {
-    if (initialSymbol) setSymbol(initialSymbol.toUpperCase())
-  }, [initialSymbol])
+    if (initialSymbol) setSymbol(initialSymbol.toUpperCase());
+  }, [initialSymbol]);
 
   useEffect(() => {
-    if (!symbol) setCompanyName('')
-  }, [symbol])
+    if (!symbol) setCompanyName("");
+  }, [symbol]);
 
   // Auto-cálculo de stop sugerido cuando cambia qty, precio o dirección
   useEffect(() => {
-    const qtyNum = parseFloat(qty)
-    if (!currentPrice || currentPrice <= 0 || !qty || isNaN(qtyNum) || qtyNum <= 0) return
-    if (totalEquity <= 0) return
-    const riskBudget = totalEquity * (userSettings.risk_per_trade_pct / 100)
-    const stopDist = riskBudget / qtyNum
-    const suggested = side === 'buy' ? currentPrice - stopDist : currentPrice + stopDist
+    const qtyNum = parseFloat(qty);
+    if (
+      !currentPrice ||
+      currentPrice <= 0 ||
+      !qty ||
+      isNaN(qtyNum) ||
+      qtyNum <= 0
+    )
+      return;
+    if (totalEquity <= 0) return;
+    const riskBudget = totalEquity * (userSettings.risk_per_trade_pct / 100);
+    const stopDist = riskBudget / qtyNum;
+    const suggested =
+      side === "buy" ? currentPrice - stopDist : currentPrice + stopDist;
     if (suggested > 0) {
-      setStopLoss(suggested.toFixed(2))
-      setErrors(prev => ({ ...prev, stop_loss: undefined }))
+      setStopLoss(suggested.toFixed(2));
+      setErrors((prev) => ({ ...prev, stop_loss: undefined }));
     }
-  }, [qty, currentPrice, side, totalEquity, userSettings.risk_per_trade_pct])
+  }, [qty, currentPrice, side, totalEquity, userSettings.risk_per_trade_pct]);
 
   // Display de riesgo real bajo el campo stop loss
   const riskDisplay = useMemo(() => {
-    const sl = parseFloat(stopLoss)
-    const q = parseFloat(qty)
-    if (!stopLoss || isNaN(sl) || sl <= 0) return null
-    if (!qty || isNaN(q) || q <= 0) return null
-    if (!currentPrice || currentPrice <= 0) return null
-    const dist = side === 'buy' ? currentPrice - sl : sl - currentPrice
-    if (dist <= 0) return null
-    const riskReal = dist * q
-    const budget = totalEquity * (userSettings.risk_per_trade_pct / 100)
-    const riskPct = totalEquity > 0 ? (riskReal / totalEquity) * 100 : 0
-    return { riskReal, riskPct, exceedsBudget: riskReal > budget }
-  }, [stopLoss, qty, currentPrice, side, totalEquity, userSettings.risk_per_trade_pct])
+    const sl = parseFloat(stopLoss);
+    const q = parseFloat(qty);
+    if (!stopLoss || isNaN(sl) || sl <= 0) return null;
+    if (!qty || isNaN(q) || q <= 0) return null;
+    if (!currentPrice || currentPrice <= 0) return null;
+    const dist = side === "buy" ? currentPrice - sl : sl - currentPrice;
+    if (dist <= 0) return null;
+    const riskReal = dist * q;
+    const budget = totalEquity * (userSettings.risk_per_trade_pct / 100);
+    const riskPct = totalEquity > 0 ? (riskReal / totalEquity) * 100 : 0;
+    return { riskReal, riskPct, exceedsBudget: riskReal > budget };
+  }, [
+    stopLoss,
+    qty,
+    currentPrice,
+    side,
+    totalEquity,
+    userSettings.risk_per_trade_pct,
+  ]);
 
   // Precio estimado para la orden
   const estimatedPrice =
-    orderType === 'market'
+    orderType === "market"
       ? currentPrice
       : limitPrice
         ? parseFloat(limitPrice)
-        : currentPrice
+        : currentPrice;
 
   // Valores parseados para RiskCalculator
-  const entryPriceNum = estimatedPrice ?? null
-  const stopLossNum = stopLoss ? parseFloat(stopLoss) : null
-  const targetNum = target ? parseFloat(target) : null
+  const entryPriceNum = estimatedPrice ?? null;
+  const stopLossNum = stopLoss ? parseFloat(stopLoss) : null;
+  const targetNum = target ? parseFloat(target) : null;
 
   function validate(): boolean {
-    const errs: ValidationErrors = {}
+    const errs: ValidationErrors = {};
 
     if (!symbol.trim()) {
-      errs.symbol = 'Símbolo requerido'
+      errs.symbol = "Símbolo requerido";
     }
 
-    const qtyNum = parseFloat(qty)
+    const qtyNum = parseFloat(qty);
     if (!qty || isNaN(qtyNum) || qtyNum <= 0) {
-      errs.qty = 'Cantidad debe ser mayor a 0'
+      errs.qty = "Cantidad debe ser mayor a 0";
     }
 
-    if (orderType === 'limit' || orderType === 'stop_limit') {
-      const lp = parseFloat(limitPrice)
+    if (orderType === "limit" || orderType === "stop_limit") {
+      const lp = parseFloat(limitPrice);
       if (!limitPrice || isNaN(lp) || lp <= 0) {
-        errs.limit_price = 'Precio límite requerido'
+        errs.limit_price = "Precio límite requerido";
       }
     }
 
     if (!stopLoss) {
-      errs.stop_loss = 'Stop loss obligatorio para calcular riesgo'
+      errs.stop_loss = "Stop loss obligatorio para calcular riesgo";
     } else {
-      const sl = parseFloat(stopLoss)
+      const sl = parseFloat(stopLoss);
       if (isNaN(sl) || sl <= 0) {
-        errs.stop_loss = 'El stop loss debe ser mayor a $0'
+        errs.stop_loss = "El stop loss debe ser mayor a $0";
       } else {
-        const ep = entryPriceNum
+        const ep = entryPriceNum;
         if (ep) {
-          const invalid = side === 'buy' ? sl >= ep : sl <= ep
+          const invalid = side === "buy" ? sl >= ep : sl <= ep;
           if (invalid) {
-            errs.stop_loss = `Stop loss debe estar ${side === 'buy' ? 'por debajo' : 'por encima'} del precio de entrada`
+            errs.stop_loss = `Stop loss debe estar ${side === "buy" ? "por debajo" : "por encima"} del precio de entrada`;
           }
         }
       }
     }
 
-    setErrors(errs)
-    return Object.keys(errs).length === 0
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   }
 
   function handleReview() {
-    if (!validate()) return
+    if (!validate()) return;
 
     const draft: OrderDraft = {
       symbol: symbol.trim().toUpperCase(),
@@ -162,41 +184,48 @@ export default function OrderForm({
       stop_loss: stopLoss ? parseFloat(stopLoss) : null,
       target: target ? parseFloat(target) : null,
       estimated_price: estimatedPrice,
-    }
+    };
 
-    onReviewOrder(draft)
+    onReviewOrder(draft);
   }
 
   // Marea de Correlación check
   const correlationWarning = useMemo(() => {
-    if (assetClass !== 'crypto' || side !== 'buy') return null
-    if (!plan) return null
-    
-    const isBearish = plan.market_bias === 'bearish' || plan.spy_trend_sma50 === 'below'
+    if (assetClass !== "crypto" || side !== "buy") return null;
+    if (!plan) return null;
+
+    const isBearish =
+      plan.market_bias === "bearish" || plan.spy_trend_sma50 === "below";
     if (isBearish) {
       return {
-        title: 'MAREA DE CORRELACIÓN (PRO)',
-        message: 'SPY está en tendencia bajista. Históricamente, las compras de Cripto fallan más en este contexto.'
-      }
+        title: "MAREA DE CORRELACIÓN (PRO)",
+        message:
+          "SPY está en tendencia bajista. Históricamente, las compras de Cripto fallan más en este contexto.",
+      };
     }
-    return null
-  }, [assetClass, side, plan])
+    return null;
+  }, [assetClass, side, plan]);
 
   // Usa qty del RiskCalculator si el usuario no escribió nada todavía
   function handleUseSuggestedQty(suggested: number) {
-    if (!qty) setQty(String(suggested))
+    if (!qty) setQty(String(suggested));
   }
 
-  const showLimitPrice = orderType === 'limit' || orderType === 'stop_limit'
+  const showLimitPrice = orderType === "limit" || orderType === "stop_limit";
 
   return (
     <div className="order-form">
       <div className="order-form__header">
         <span className="order-form__title">NUEVA ORDEN</span>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <select 
-            className="input-base" 
-            style={{ fontSize: '0.6rem', padding: '2px 4px', height: '20px', width: 'auto' }}
+        <div style={{ display: "flex", gap: "8px" }}>
+          <select
+            className="input-base"
+            style={{
+              fontSize: "0.6rem",
+              padding: "2px 4px",
+              height: "20px",
+              width: "auto",
+            }}
             value={assetClass}
             onChange={(e) => setAssetClass(e.target.value as any)}
           >
@@ -209,19 +238,23 @@ export default function OrderForm({
 
       <div className="order-form__body">
         {/* Symbol & Name Split */}
-        <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '12px' }}>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px" }}
+        >
           {/* Symbol */}
-          <div className="form-field" style={{ position: 'relative' }}>
-            <label className="form-label" htmlFor="of-symbol">SÍMBOLO</label>
-            <div style={{ position: 'relative' }}>
+          <div className="form-field" style={{ position: "relative" }}>
+            <label className="form-label" htmlFor="of-symbol">
+              SÍMBOLO
+            </label>
+            <div style={{ position: "relative" }}>
               <input
                 id="of-symbol"
-                className={`input-base input-mono ${errors.symbol ? 'input-error' : ''}`}
+                className={`input-base input-mono ${errors.symbol ? "input-error" : ""}`}
                 value={symbol}
-                onChange={e => { 
-                  setSymbol(e.target.value.toUpperCase())
-                  setErrors(p => ({ ...p, symbol: undefined }))
-                  setShowSuggestions(true)
+                onChange={(e) => {
+                  setSymbol(e.target.value.toUpperCase());
+                  setErrors((p) => ({ ...p, symbol: undefined }));
+                  setShowSuggestions(true);
                 }}
                 onFocus={() => setShowSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
@@ -230,23 +263,34 @@ export default function OrderForm({
                 autoCapitalize="characters"
               />
               {isSearching && (
-                <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
-                  <Loader2 size={12} className="animate-spin" color="var(--text-muted)" />
+                <div
+                  style={{
+                    position: "absolute",
+                    right: "10px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                  }}
+                >
+                  <Loader2
+                    size={12}
+                    className="animate-spin"
+                    color="var(--text-muted)"
+                  />
                 </div>
               )}
             </div>
 
             {/* Suggestions Dropdown (Absolute to the whole row or just symbol?) */}
             {showSuggestions && suggestions.length > 0 && (
-              <div className="search-suggestions" style={{ width: '300px' }}>
-                {suggestions.map(s => (
-                  <div 
-                    key={s.symbol} 
+              <div className="search-suggestions" style={{ width: "300px" }}>
+                {suggestions.map((s) => (
+                  <div
+                    key={s.symbol}
                     className="search-suggestion-item"
                     onClick={() => {
-                      setSymbol(s.symbol)
-                      setCompanyName(s.name)
-                      setShowSuggestions(false)
+                      setSymbol(s.symbol);
+                      setCompanyName(s.name);
+                      setShowSuggestions(false);
                     }}
                   >
                     <span className="suggestion-symbol">{s.symbol}</span>
@@ -255,38 +299,20 @@ export default function OrderForm({
                 ))}
               </div>
             )}
-            {errors.symbol && <span className="form-error">{errors.symbol}</span>}
-          </div>
-
-          {/* Company Name */}
-          <div className="form-field">
-            <label className="form-label" htmlFor="of-name">NOMBRE DE COMPAÑÍA</label>
-            <input
-              id="of-name"
-              className="input-base"
-              value={companyName}
-              onChange={e => setCompanyName(e.target.value)}
-              placeholder="Nombre de la empresa..."
-              spellCheck={false}
-            />
-            {currentPrice && (
-              <div style={{ marginTop: '4px', textAlign: 'right' }}>
-                <span className="form-hint font-mono" style={{ margin: 0, fontSize: '11px', color: 'var(--color-primary)' }}>
-                  ${currentPrice.toFixed(2)}
-                </span>
-              </div>
+            {errors.symbol && (
+              <span className="form-error">{errors.symbol}</span>
             )}
           </div>
-        </div>
 
+          
         {/* Side toggle */}
         <div className="form-field">
           <label className="form-label">DIRECCIÓN</label>
           <div className="side-toggle">
             <button
               id="of-side-buy"
-              className={`side-toggle__btn side-toggle__btn--buy ${side === 'buy' ? 'active' : ''}`}
-              onClick={() => setSide('buy')}
+              className={`side-toggle__btn side-toggle__btn--buy ${side === "buy" ? "active" : ""}`}
+              onClick={() => setSide("buy")}
               type="button"
             >
               <TrendingUp size={13} />
@@ -294,8 +320,8 @@ export default function OrderForm({
             </button>
             <button
               id="of-side-sell"
-              className={`side-toggle__btn side-toggle__btn--sell ${side === 'sell' ? 'active' : ''}`}
-              onClick={() => setSide('sell')}
+              className={`side-toggle__btn side-toggle__btn--sell ${side === "sell" ? "active" : ""}`}
+              onClick={() => setSide("sell")}
               type="button"
             >
               <TrendingDown size={13} />
@@ -306,13 +332,17 @@ export default function OrderForm({
 
         {/* Order type */}
         <div className="form-field">
-          <label className="form-label" htmlFor="of-order-type">TIPO DE ORDEN</label>
+          <label className="form-label" htmlFor="of-order-type">
+            TIPO DE ORDEN
+          </label>
           <div className="select-wrapper">
             <select
               id="of-order-type"
               className="input-base"
               value={orderType}
-              onChange={e => setOrderType(e.target.value as OrderDraft['order_type'])}
+              onChange={(e) =>
+                setOrderType(e.target.value as OrderDraft["order_type"])
+              }
             >
               <option value="market">Market</option>
               <option value="limit">Limit</option>
@@ -326,35 +356,47 @@ export default function OrderForm({
         {/* Limit price (conditional) */}
         {showLimitPrice && (
           <div className="form-field">
-            <label className="form-label" htmlFor="of-limit-price">PRECIO LÍMITE</label>
+            <label className="form-label" htmlFor="of-limit-price">
+              PRECIO LÍMITE
+            </label>
             <div className="input-prefix-wrap">
               <span className="input-prefix">$</span>
               <input
                 id="of-limit-price"
-                className={`input-base input-mono input-with-prefix ${errors.limit_price ? 'input-error' : ''}`}
+                className={`input-base input-mono input-with-prefix ${errors.limit_price ? "input-error" : ""}`}
                 type="number"
                 step="0.01"
                 min="0"
                 value={limitPrice}
-                onChange={e => { setLimitPrice(e.target.value); setErrors(p => ({ ...p, limit_price: undefined })) }}
+                onChange={(e) => {
+                  setLimitPrice(e.target.value);
+                  setErrors((p) => ({ ...p, limit_price: undefined }));
+                }}
                 placeholder="0.00"
               />
             </div>
-            {errors.limit_price && <span className="form-error">{errors.limit_price}</span>}
+            {errors.limit_price && (
+              <span className="form-error">{errors.limit_price}</span>
+            )}
           </div>
         )}
 
         {/* Quantity */}
         <div className="form-field">
-          <label className="form-label" htmlFor="of-qty">CANTIDAD (ACCIONES)</label>
+          <label className="form-label" htmlFor="of-qty">
+            CANTIDAD (ACCIONES)
+          </label>
           <input
             id="of-qty"
-            className={`input-base input-mono ${errors.qty ? 'input-error' : ''}`}
+            className={`input-base input-mono ${errors.qty ? "input-error" : ""}`}
             type="number"
             min="1"
             step="1"
             value={qty}
-            onChange={e => { setQty(e.target.value); setErrors(p => ({ ...p, qty: undefined })) }}
+            onChange={(e) => {
+              setQty(e.target.value);
+              setErrors((p) => ({ ...p, qty: undefined }));
+            }}
             placeholder="Qty sugerida por el calculador →"
           />
           {errors.qty && <span className="form-error">{errors.qty}</span>}
@@ -363,31 +405,41 @@ export default function OrderForm({
         {/* Stop loss */}
         <div className="form-field">
           <label className="form-label" htmlFor="of-stop-loss">
-            STOP LOSS <span style={{ color: 'var(--color-loss)', fontSize: '0.6rem' }}>OBLIGATORIO</span>
+            STOP LOSS{" "}
+            <span style={{ color: "var(--color-loss)", fontSize: "0.6rem" }}>
+              OBLIGATORIO
+            </span>
           </label>
           <div className="input-prefix-wrap">
             <span className="input-prefix">$</span>
             <input
               id="of-stop-loss"
-              className={`input-base input-mono input-with-prefix ${errors.stop_loss ? 'input-error' : ''}`}
+              className={`input-base input-mono input-with-prefix ${errors.stop_loss ? "input-error" : ""}`}
               type="number"
               step="0.01"
               min="0"
               value={stopLoss}
-              onChange={e => { setStopLoss(e.target.value); setErrors(p => ({ ...p, stop_loss: undefined })) }}
+              onChange={(e) => {
+                setStopLoss(e.target.value);
+                setErrors((p) => ({ ...p, stop_loss: undefined }));
+              }}
               placeholder="0.00"
             />
           </div>
-          {errors.stop_loss && <span className="form-error">{errors.stop_loss}</span>}
+          {errors.stop_loss && (
+            <span className="form-error">{errors.stop_loss}</span>
+          )}
           {riskDisplay && !errors.stop_loss && (
             <div className="stop-risk-info">
               <span className="stop-risk-info__main font-mono">
-                Riesgo máximo: {formatCurrency(riskDisplay.riskReal)} ({formatPercent(riskDisplay.riskPct, false)} del portafolio)
+                Riesgo máximo: {formatCurrency(riskDisplay.riskReal)} (
+                {formatPercent(riskDisplay.riskPct, false)} del portafolio)
               </span>
               {riskDisplay.exceedsBudget && (
                 <div className="stop-risk-info__warning">
                   <AlertTriangle size={11} />
-                  Este stop supera tu límite de riesgo por operación ({userSettings.risk_per_trade_pct}%)
+                  Este stop supera tu límite de riesgo por operación (
+                  {userSettings.risk_per_trade_pct}%)
                 </div>
               )}
             </div>
@@ -397,7 +449,10 @@ export default function OrderForm({
         {/* Target (optional) */}
         <div className="form-field">
           <label className="form-label" htmlFor="of-target">
-            TARGET <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>OPCIONAL — para R/R</span>
+            TARGET{" "}
+            <span style={{ color: "var(--text-muted)", fontSize: "0.6rem" }}>
+              OPCIONAL — para R/R
+            </span>
           </label>
           <div className="input-prefix-wrap">
             <span className="input-prefix">$</span>
@@ -408,7 +463,7 @@ export default function OrderForm({
               step="0.01"
               min="0"
               value={target}
-              onChange={e => setTarget(e.target.value)}
+              onChange={(e) => setTarget(e.target.value)}
               placeholder="0.00"
             />
           </div>
@@ -442,17 +497,35 @@ export default function OrderForm({
 
         {/* Marea de Correlación Warning */}
         {correlationWarning && (
-          <div style={{ 
-            background: 'rgba(239, 68, 68, 0.05)', 
-            border: '1px solid rgba(239, 68, 68, 0.2)', 
-            padding: '10px', 
-            borderRadius: '6px',
-            marginBottom: '4px'
-          }}>
-            <div style={{ color: 'var(--color-loss)', fontSize: '0.65rem', fontWeight: 800, marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div
+            style={{
+              background: "rgba(239, 68, 68, 0.05)",
+              border: "1px solid rgba(239, 68, 68, 0.2)",
+              padding: "10px",
+              borderRadius: "6px",
+              marginBottom: "4px",
+            }}
+          >
+            <div
+              style={{
+                color: "var(--color-loss)",
+                fontSize: "0.65rem",
+                fontWeight: 800,
+                marginBottom: "2px",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
               <AlertTriangle size={12} /> {correlationWarning.title}
             </div>
-            <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
+            <p
+              style={{
+                fontSize: "0.65rem",
+                color: "var(--text-secondary)",
+                lineHeight: 1.3,
+              }}
+            >
               {correlationWarning.message}
             </p>
           </div>
@@ -461,11 +534,15 @@ export default function OrderForm({
         {/* Botón revisar */}
         <button
           id="of-review-btn"
-          className={`order-form__submit ${side === 'buy' ? 'btn-buy' : 'btn-sell'}`}
+          className={`order-form__submit ${side === "buy" ? "btn-buy" : "btn-sell"}`}
           onClick={handleReview}
           type="button"
         >
-          {side === 'buy' ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
+          {side === "buy" ? (
+            <TrendingUp size={15} />
+          ) : (
+            <TrendingDown size={15} />
+          )}
           REVISAR ORDEN
         </button>
       </div>
@@ -696,7 +773,7 @@ export default function OrderForm({
         }
       `}</style>
     </div>
-  )
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -711,36 +788,37 @@ function UseSuggestedQtyLink({
   side,
   onUse,
 }: {
-  entryPrice: number
-  stopLoss: number
-  totalEquity: number
-  riskPct: number
-  side: 'buy' | 'sell'
-  onUse: (qty: number) => void
+  entryPrice: number;
+  stopLoss: number;
+  totalEquity: number;
+  riskPct: number;
+  side: "buy" | "sell";
+  onUse: (qty: number) => void;
 }) {
-  const stopDistance = side === 'buy' ? entryPrice - stopLoss : stopLoss - entryPrice
-  if (stopDistance <= 0) return null
+  const stopDistance =
+    side === "buy" ? entryPrice - stopLoss : stopLoss - entryPrice;
+  if (stopDistance <= 0) return null;
 
-  const riskBudget = totalEquity * (riskPct / 100)
-  const suggested = Math.floor(riskBudget / stopDistance)
-  if (suggested <= 0) return null
+  const riskBudget = totalEquity * (riskPct / 100);
+  const suggested = Math.floor(riskBudget / stopDistance);
+  if (suggested <= 0) return null;
 
   return (
     <button
       type="button"
       onClick={() => onUse(suggested)}
       style={{
-        background: 'none',
-        border: 'none',
-        color: 'var(--color-primary)',
-        fontSize: '0.7rem',
-        cursor: 'pointer',
-        textDecoration: 'underline',
-        textAlign: 'left',
+        background: "none",
+        border: "none",
+        color: "var(--color-primary)",
+        fontSize: "0.7rem",
+        cursor: "pointer",
+        textDecoration: "underline",
+        textAlign: "left",
         padding: 0,
       }}
     >
       ← Usar qty sugerida ({suggested} acciones)
     </button>
-  )
+  );
 }
