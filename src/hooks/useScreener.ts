@@ -7,7 +7,6 @@ import type {
   ScreenerResult,
 } from "../types";
 import { useAuth } from "./useAuth";
-import { useState, useEffect } from "react"; // agrega useEffect
 
 export function useScreener() {
   const { user } = useAuth();
