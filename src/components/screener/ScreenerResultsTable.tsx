@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star, Eye, ArrowUp, ArrowDown } from 'lucide-react';
+import { Star, Eye, ArrowUp, ArrowDown, Plane } from 'lucide-react';
+import { useFlightPlan } from '../../hooks/useFlightPlan';
 import { formatCurrency, formatPercent, formatCompactNumber } from '../../lib/formatters';
 import type { ScreenerResultItem } from '../../types';
 
@@ -12,6 +13,7 @@ type SortKey = keyof ScreenerResultItem;
 
 export function ScreenerResultsTable({ items }: Props) {
   const navigate = useNavigate();
+  const { plan, addCandidate } = useFlightPlan();
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
 
@@ -72,6 +74,7 @@ export function ScreenerResultsTable({ items }: Props) {
             <Th label="RSI" sortKey="rsi_weekly" onSort={handleSort} config={sortConfig} align="right" />
             <Th label="EPS Est" sortKey="eps_next_estimate" onSort={handleSort} config={sortConfig} align="right" />
             <Th label="Score" sortKey="score" onSort={handleSort} config={sortConfig} align="center" />
+            <th style={{ ...thStyle, width: '40px' }}></th>
           </tr>
         </thead>
         <tbody>
@@ -142,6 +145,40 @@ export function ScreenerResultsTable({ items }: Props) {
                   )}
                 </div>
               </td>
+              <td style={{ ...tdStyle, textAlign: 'center' }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!plan) {
+                      alert('Primero debés inicializar el Plan de Vuelo del día.');
+                      return;
+                    }
+                    addCandidate({
+                      symbol: item.symbol,
+                      setup_type: 'breakout', // Default
+                      current_price: item.price,
+                      stop_loss: item.price * 0.95, // Default 5%
+                      target: item.price * 1.15, // Default 15%
+                      entry_thesis: item.ai_note
+                    });
+                  }}
+                  title="Agregar al Plan de Vuelo"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: item.already_in_portfolio ? 'var(--text-muted)' : 'var(--color-primary)',
+                    cursor: item.already_in_portfolio ? 'not-allowed' : 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    opacity: hoveredRow === item.symbol ? 1 : 0.3,
+                    transition: 'opacity 0.2s'
+                  }}
+                  disabled={item.already_in_portfolio}
+                >
+                  <Plane size={14} />
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -192,6 +229,16 @@ function Th({ label, sortKey, onSort, config, align = 'left' }: {
 const tdStyle: React.CSSProperties = {
   padding: '12px 16px',
   borderBottom: '1px solid var(--border-subtle)',
+};
+
+const thStyle: React.CSSProperties = {
+  padding: '12px 16px',
+  color: 'var(--text-muted)',
+  fontWeight: 600,
+  fontSize: '11px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  borderBottom: '1px solid var(--border-default)',
 };
 
 const tooltipStyle: React.CSSProperties = {

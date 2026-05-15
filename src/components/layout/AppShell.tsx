@@ -7,10 +7,16 @@ import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import { useAuth } from '../../hooks/useAuth'
+import { useJournal } from '../../hooks/useJournal'
+import { usePriceAlerts } from '../../hooks/usePriceAlerts'
 
 export default function AppShell() {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const { user, signOut } = useAuth()
+  const { entries } = useJournal()
+  usePriceAlerts()
+
+  const pendingCount = entries.filter(e => e.order_id && !e.outcome).length
 
   return (
     <div
@@ -27,7 +33,7 @@ export default function AppShell() {
         onToggle={() => setIsCollapsed((c) => !c)}
         user={user}
         onSignOut={signOut}
-        pendingPostMortems={3}
+        pendingPostMortems={pendingCount}
       />
 
       <ToastContainer />

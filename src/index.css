@@ -102,6 +102,12 @@ html, body, #root {
   .border-subtle {
     border-color: var(--border-subtle);
   }
+
+  .no-print {
+    @media print {
+      display: none !important;
+    }
+  }
 }
 
 /* ── Componentes Base ───────────────────────────────────────────────── */

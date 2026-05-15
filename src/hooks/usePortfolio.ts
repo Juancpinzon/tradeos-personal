@@ -2,7 +2,7 @@
 // src/hooks/usePortfolio.ts — Hook principal de portafolio (Alpaca + Binance)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AccountSummary, Position, EquitySnapshot } from "../types";
 import { supabase } from "../lib/supabase";
@@ -113,6 +113,20 @@ async function fetchEquitySnapshots(): Promise<EquitySnapshot[]> {
   return (data ?? []) as EquitySnapshot[];
 }
 
+async function fetchSymbolNames(symbols: string[]): Promise<Record<string, string>> {
+  if (symbols.length === 0) return {};
+  const { data, error } = await supabase
+    .from("screener_universe")
+    .select("symbol, name")
+    .in("symbol", symbols);
+  
+  if (error) return {};
+  return (data ?? []).reduce((acc, curr) => ({
+    ...acc,
+    [curr.symbol]: curr.name
+  }), {} as Record<string, string>);
+}
+
 // ─── hook ─────────────────────────────────────────────────────────────────────
 
 export function usePortfolio(): UsePortfolioReturn {
@@ -150,6 +164,21 @@ export function usePortfolio(): UsePortfolioReturn {
     retry: 1,
   });
 
+  const allSymbols = useMemo(() => {
+    const set = new Set([
+      ...(alpacaPositionsQuery.data ?? []).map(p => p.symbol),
+      ...(binanceQuery.data?.positions ?? []).map(p => p.symbol)
+    ]);
+    return Array.from(set).sort();
+  }, [alpacaPositionsQuery.data, binanceQuery.data?.positions]);
+
+  const namesQuery = useQuery({
+    queryKey: ["portfolio", "names", allSymbols],
+    queryFn: () => fetchSymbolNames(allSymbols),
+    staleTime: 24 * 60 * 60 * 1000, // 24h
+    enabled: allSymbols.length > 0,
+  });
+
   const refetch = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["portfolio"] });
   }, [queryClient]);
@@ -170,6 +199,7 @@ export function usePortfolio(): UsePortfolioReturn {
   // Posiciones Alpaca — portfolio_weight_pct relativo al total global
   const alpacaPositions: Position[] = (alpacaPositionsQuery.data ?? []).map((pos) => ({
     ...pos,
+    name: namesQuery.data?.[pos.symbol],
     portfolio_weight_pct:
       totalEquity > 0 ? (pos.market_value / totalEquity) * 100 : pos.portfolio_weight_pct,
   }));
@@ -185,6 +215,7 @@ export function usePortfolio(): UsePortfolioReturn {
     user_id:   (pos.user_id ?? ""),
     synced_at: (pos.synced_at ?? new Date().toISOString()),
     created_at:(pos.created_at ?? new Date().toISOString()),
+    name:      namesQuery.data?.[pos.symbol],
     portfolio_weight_pct:
       totalEquity > 0 ? (pos.market_value / totalEquity) * 100 : 0,
   }));

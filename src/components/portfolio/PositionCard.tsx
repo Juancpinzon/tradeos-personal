@@ -138,24 +138,31 @@ export default function PositionCard({ position, earningsEvents = [], compact = 
     >
       {/* Fila 1: Symbol + badges + precio actual */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-          <span
-            style={{
-              fontFamily: '"Syne", sans-serif',
-              fontWeight: 700,
-              fontSize: compact ? '0.875rem' : '0.9375rem',
-              color: 'var(--text-primary)',
-              letterSpacing: '0.02em',
-            }}
-          >
-            {position.symbol}
-          </span>
-          <BrokerBadge assetClass={position.asset_class} />
-          <span className={`badge badge-${position.side}`} style={{ fontSize: '0.5rem' }}>
-            {position.side.toUpperCase()}
-          </span>
-          {earningsDays !== null && earningsDays <= 7 && (
-            <EarningsBadge days={earningsDays} />
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+            <span
+              style={{
+                fontFamily: '"Syne", sans-serif',
+                fontWeight: 700,
+                fontSize: compact ? '0.875rem' : '0.9375rem',
+                color: 'var(--text-primary)',
+                letterSpacing: '0.02em',
+              }}
+            >
+              {position.symbol}
+            </span>
+            <BrokerBadge assetClass={position.asset_class} />
+            <span className={`badge badge-${position.side}`} style={{ fontSize: '0.5rem' }}>
+              {position.side.toUpperCase()}
+            </span>
+            {earningsDays !== null && earningsDays <= 7 && (
+              <EarningsBadge days={earningsDays} />
+            )}
+          </div>
+          {position.name && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+              {position.name}
+            </span>
           )}
         </div>
         <span className="font-mono" style={{ fontSize: '0.9375rem', color: 'var(--text-primary)', fontWeight: 600 }}>

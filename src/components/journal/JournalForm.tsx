@@ -7,6 +7,8 @@
 import { useState } from 'react'
 import type { EmotionalState, ConfidenceLevel, SetupType, JournalEntry } from '../../types'
 import { X, ChevronRight } from 'lucide-react'
+import { useFlightPlan } from '../../hooks/useFlightPlan'
+import { useEffect } from 'react'
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -76,9 +78,23 @@ export default function JournalForm({
   const [stopLoss,       setStopLoss]       = useState('')
   const [target,         setTarget]         = useState('')
 
+  const { plan, updateCandidate } = useFlightPlan()
+
   const resolvedSymbol     = symbolProp ?? symbolInput
   const resolvedSide       = sideProp   ?? sideInput
   const resolvedEntryPrice = entryPriceProp ?? (entryPriceInput ? parseFloat(entryPriceInput) : undefined)
+
+  // Precarga desde Flight Plan
+  useEffect(() => {
+    if (!plan || !resolvedSymbol) return
+    const candidate = plan.candidates?.find(c => c.symbol === resolvedSymbol)
+    if (candidate) {
+      setThesis(prev => prev || candidate.entry_thesis || '')
+      setSetupType(prev => prev || (candidate.setup_type as SetupType) || '')
+      setStopLoss(prev => prev || candidate.stop_loss?.toString() || '')
+      setTarget(prev => prev || candidate.target?.toString() || '')
+    }
+  }, [plan, resolvedSymbol])
 
   // Auto R/R
   const rrNum = resolvedEntryPrice && stopLoss && target
@@ -108,6 +124,14 @@ export default function JournalForm({
       planned_risk_reward: rrRatio     ? parseFloat(rrRatio)     : undefined,
       followed_plan:       false,
     })
+
+    // Marcar como ejecutado en el Flight Plan si corresponde
+    if (plan && resolvedSymbol) {
+      const candidate = plan.candidates?.find(c => c.symbol === resolvedSymbol)
+      if (candidate && !candidate.executed) {
+        updateCandidate({ id: candidate.id, updates: { executed: true } })
+      }
+    }
   }
 
   return (

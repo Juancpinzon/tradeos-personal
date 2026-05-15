@@ -6,10 +6,12 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useEarnings } from '../hooks/useEarnings'
+import { useFlightPlan } from '../hooks/useFlightPlan'
 import EquityChart from '../components/portfolio/EquityChart'
 import PortfolioDoctor from '../components/portfolio/PortfolioDoctor'
 import PositionCard from '../components/portfolio/PositionCard'
 import EarningsCalendar from '../components/earnings/EarningsCalendar'
+import { FlightPlanProgress } from '../components/flight-plan/FlightPlanProgress'
 import {
   formatCurrency,
   formatPercent,
@@ -193,6 +195,7 @@ export default function Dashboard() {
     isSyncing,
     error,
   } = usePortfolio()
+  const { plan } = useFlightPlan()
   const { events: earningsEvents } = useEarnings()
   const [doctorOpen, setDoctorOpen] = useState(false)
   const navigate = useNavigate()
@@ -248,7 +251,7 @@ export default function Dashboard() {
         style={{
           flex: 1,
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
+          gridTemplateColumns: '420px 1fr',
           gap: 0,
           overflow: 'hidden',
           minHeight: 0,
@@ -352,6 +355,14 @@ export default function Dashboard() {
 
         {/* ── Columna derecha: Chart + Eventos ── */}
         <div style={{ overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          
+          {/* Flight Plan Progress */}
+          {plan && (
+            <div style={{ marginBottom: '0.5rem' }}>
+              <FlightPlanProgress plan={plan} />
+            </div>
+          )}
+
           {/* Equity Chart */}
           <div>
             <h2

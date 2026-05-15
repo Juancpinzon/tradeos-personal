@@ -11,11 +11,9 @@ import JournalList     from '../components/journal/JournalList'
 import JournalStats    from '../components/journal/JournalStats'
 import JournalForm     from '../components/journal/JournalForm'
 import PostMortemPanel from '../components/journal/PostMortemPanel'
-import { Plus } from 'lucide-react'
+import { Plus, Loader2 } from 'lucide-react'
 
-// ─── Mock data ───────────────────────────────────────────────────────────────
-
-const MOCK_ENTRIES: JournalEntry[] = []
+import { useJournal } from '../hooks/useJournal'
 
 // ─── Panel mode type ──────────────────────────────────────────────────────────
 
@@ -24,7 +22,7 @@ type PanelMode = 'form' | 'postmortem' | null
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function Journal() {
-  const [entries,       setEntries]       = useState<JournalEntry[]>(MOCK_ENTRIES)
+  const { entries, isLoading, addEntry, updateEntry } = useJournal()
   const [panelMode,     setPanelMode]     = useState<PanelMode>(null)
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null)
 
@@ -43,34 +41,14 @@ export default function Journal() {
     setPanelMode('form')
   }
 
-  const handleSaveForm = (data: Partial<JournalEntry>) => {
-    const newEntry: JournalEntry = {
-      id:               String(Date.now()),
-      user_id:          'u1',
-      symbol:           data.symbol         ?? 'SYM',
-      side:             data.side           ?? 'buy',
-      asset_class:      data.asset_class    ?? 'equity',
-      entry_thesis:     data.entry_thesis   ?? '',
-      emotional_state:  data.emotional_state ?? 'calm',
-      confidence_level: data.confidence_level ?? 3,
-      followed_plan:    false,
-      created_at:       new Date().toISOString(),
-      updated_at:       new Date().toISOString(),
-      ...data,
-    }
-    setEntries(prev => [newEntry, ...prev])
+  const handleSaveForm = async (data: Partial<JournalEntry>) => {
+    await addEntry(data)
     setPanelMode(null)
   }
 
-  const handleSavePostMortem = (updates: Partial<JournalEntry>) => {
+  const handleSavePostMortem = async (updates: Partial<JournalEntry>) => {
     if (!selectedEntry) return
-    setEntries(prev =>
-      prev.map(e =>
-        e.id === selectedEntry.id
-          ? { ...e, ...updates, updated_at: new Date().toISOString() }
-          : e
-      )
-    )
+    await updateEntry({ id: selectedEntry.id, updates })
     setPanelMode(null)
     setSelectedEntry(null)
   }
@@ -142,11 +120,18 @@ export default function Journal() {
           onClick={handleNewEntry}
           className="btn-primary"
           style={{ width: 'auto', padding: '0.5rem 1rem', fontSize: '0.8125rem' }}
+          disabled={isLoading}
         >
-          <Plus size={14} />
+          {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
           Nueva entrada
         </button>
       </div>
+
+      {isLoading && entries.length === 0 && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Loader2 className="animate-spin" style={{ color: 'var(--color-primary)' }} />
+        </div>
+      )}
 
       {/* ── Main: Lista + Stats ──────────────────────────────────────── */}
       <div style={{

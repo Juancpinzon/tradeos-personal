@@ -27,6 +27,7 @@ export interface Position {
   user_id: string;
   broker: "alpaca" | "binance";
   symbol: string;
+  name?: string; // Nombre de la compañía
   qty: number;
   avg_entry_price: number;
   current_price: number;
@@ -407,4 +408,58 @@ export function simplifyOrderStatus(
   )
     return "open";
   return "pending";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FLIGHT PLAN
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FlightPlan {
+  id: string;
+  user_id: string;
+  date: string; // ISO date
+  market: 'NYSE' | 'crypto' | 'both';
+  
+  spy_close_yesterday?: number;
+  spy_trend_sma50?: 'above' | 'below' | 'at';
+  vix_level?: number;
+  market_bias?: 'bullish' | 'bearish' | 'neutral';
+  pre_market_news?: string;
+  
+  max_daily_loss?: number;
+  max_operations: number;
+  stop_daily_triggered: boolean;
+  
+  checklist_completed: boolean;
+  checklist_items: Record<string, boolean>;
+  
+  pnl_total?: number;
+  trades_won: number;
+  trades_lost: number;
+  followed_plan?: 'yes' | 'partial' | 'no';
+  daily_lesson?: string;
+  emotional_state_close?: 'satisfied' | 'neutral' | 'frustrated' | 'anxious' | 'overexcited';
+  
+  created_at: string;
+  updated_at: string;
+  candidates?: FlightPlanCandidate[];
+}
+
+export interface FlightPlanCandidate {
+  id: string;
+  flight_plan_id: string;
+  symbol: string;
+  setup_type: string;
+  current_price?: number;
+  support_level?: number;
+  stop_loss: number;
+  target: number;
+  risk_reward?: number;
+  qty_suggested?: number;
+  capital_at_risk?: number;
+  entry_thesis?: string;
+  screener_result_id?: string;
+  journal_entry_id?: string;
+  executed: boolean;
+  created_at: string;
 }

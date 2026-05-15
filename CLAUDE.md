@@ -923,17 +923,18 @@ vercel --prod
 
 ### Fase 7: Alertas de precio + Watchlist completa
 
-- [ ] Migration `010`: `watchlist_items` con `alert_price_above` y `alert_price_below`
-- [ ] Hook `useWatchlist`: CRUD completo de items vinculados a `user_id`
-- [ ] `WatchlistPanel.tsx`: Lista persistente con polling de precios (vía cache)
-- [ ] Integración: Click en watchlist → Trading/Research con símbolo activo
-- [ ] Alertas visuales: Highlight en la fila si el precio cruza el umbral configurado
-- [ ] Seed data: Watchlist por defecto (AAPL, MSFT, NVDA, TSLA, SPY, BTC, ETH)
-- [ ] **Criterio de éxito**: Watchlist se sincroniza entre dispositivos → Alertas visuales funcionan al cargar precios nuevos
+- [x] Migration `010`: `watchlist_items` con `alert_price_above` y `alert_price_below`
+- [x] Hook `useWatchlist`: CRUD completo de items vinculados a `user_id`
+- [x] `WatchlistPanel.tsx`: Lista persistente con polling de precios (vía cache)
+- [x] Integración: Click en watchlist → Trading/Research con símbolo activo
+- [x] Alertas visuales: Highlight en la fila si el precio cruza el umbral configurado
+- [x] Hook `usePriceAlerts`: Notificaciones nativas del navegador al cruzar precios
+- [x] Seed data: Watchlist por defecto (AAPL, MSFT, NVDA, TSLA, SPY, BTC, ETH)
+- [x] **Criterio de éxito**: Watchlist se sincroniza entre dispositivos → Alertas visuales y sonoras funcionan
 
 ---
 
-## 🔄 Fase 8: Importador de Historial (agregada post-deploy)
+## 🚀 Fase 8: Importador de Historial [COMPLETADA]
 
 ### Nuevo módulo: Import History
 
@@ -979,7 +980,7 @@ src/
 
 ---
 
-## 🗓️ Fase 9: Plan de Vuelo Diario (agregada post-deploy)
+## 🚀 Fase 9: Plan de Vuelo Diario [COMPLETADA]
 
 ### Concepto
 El Plan de Vuelo es la pantalla de preparación pre-sesión. Se completa antes de la apertura del mercado y conecta automáticamente con el Screener, el Journal y las Estrategias. Elimina la fricción de pasar datos entre módulos manualmente.
@@ -1119,4 +1120,25 @@ Nuevo ítem en Sidebar entre Journal y Screener: 📋 Plan de Vuelo → /flight-
 - Un solo Plan de Vuelo por usuario por día (unique constraint en DB)
 - Los candidatos sin `journal_entry_id` se muestran como "pendientes" al cierre
 - El `daily_lesson` es obligatorio para marcar el plan como completado
-- El PDF se genera en el frontend con la librería `jspdf` + `html2canvas`
+- El PDF se genera en el frontend con @media print para máxima fidelidad
+
+---
+
+## 🚀 Fase 10: Profesionalización y Estabilidad [COMPLETADA]
+
+- [x] **UI Institucional**: Diseño Dark Luxury consistente en todas las pantallas
+- [x] **Sincronización Real**: Eliminación de todos los `MOCK_DATA`
+- [x] **Market Pulse**: Marquee animado con precios en tiempo real en el Sidebar
+- [x] **Flight Plan Progress**: Widget en Dashboard que trackea el plan del día
+- [x] **Despliegue Pro**: Sincronización de migraciones Supabase + CI/CD en Vercel
+- [x] **Corrección de Tipado**: TypeScript strict mode validado sin errores
+
+---
+
+## 🚀 Fase 11: Academia y Nivel Pro [COMPLETADA]
+
+- [x] **Módulo Academia**: Digitalización de manuales PDF en `/academy`
+- [x] **Estrategias Tácticas**: Digitalización de ORB, Pullback, Stage 2 Breakout
+- [x] **Marea de Correlación (Pro)**: Lógica de protección que alerta sobre compras Cripto cuando SPY es Bearish
+- [x] **UI Split**: Separación de campos "Símbolo" y "Nombre de Compañía" para mayor precisión
+- [x] **Glosario Integrado**: Términos técnicos accesibles desde la Academia

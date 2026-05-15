@@ -16,6 +16,8 @@ import Trading     from './pages/Trading'
 import Research    from './pages/Research'
 import Journal     from './pages/Journal'
 import Screener    from './pages/Screener'
+import FlightPlan  from './pages/FlightPlan'
+import Academy     from './pages/Academy'
 import History     from './pages/History'
 import Settings    from './pages/Settings'
 
@@ -69,7 +71,9 @@ function ProtectedRoutes() {
         <Route path="trading"   element={<Trading />}   />
         <Route path="research"  element={<Research />}  />
         <Route path="journal"   element={<Journal />}   />
-        <Route path="screener"  element={<Screener />}  />
+        <Route path="flight-plan" element={<FlightPlan />} />
+        <Route path="academy"     element={<Academy />}    />
+        <Route path="screener"    element={<Screener />}   />
         <Route path="history"   element={<History />}   />
         <Route path="settings"  element={<Settings />}  />
       </Route>

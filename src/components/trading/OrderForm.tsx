@@ -9,6 +9,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { ChevronDown, TrendingUp, TrendingDown, AlertTriangle, Loader2 } from 'lucide-react'
 import RiskCalculator from './RiskCalculator'
 import { useSymbolSearch } from '../../hooks/useSymbolSearch'
+import { useFlightPlan } from '../../hooks/useFlightPlan'
 import { formatCurrency, formatPercent } from '../../lib/formatters'
 import type { UserSettings } from '../../types'
 
@@ -54,7 +55,9 @@ export default function OrderForm({
   const [errors, setErrors] = useState<ValidationErrors>({})
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [companyName, setCompanyName] = useState('')
+  const [assetClass, setAssetClass] = useState<'equity' | 'crypto'>('equity')
   const { suggestions, isLoading: isSearching } = useSymbolSearch(symbol)
+  const { plan } = useFlightPlan()
 
   // Sync symbol si cambia desde afuera (watchlist click)
   useEffect(() => {
@@ -164,6 +167,21 @@ export default function OrderForm({
     onReviewOrder(draft)
   }
 
+  // Marea de Correlación check
+  const correlationWarning = useMemo(() => {
+    if (assetClass !== 'crypto' || side !== 'buy') return null
+    if (!plan) return null
+    
+    const isBearish = plan.market_bias === 'bearish' || plan.spy_trend_sma50 === 'below'
+    if (isBearish) {
+      return {
+        title: 'MAREA DE CORRELACIÓN (PRO)',
+        message: 'SPY está en tendencia bajista. Históricamente, las compras de Cripto fallan más en este contexto.'
+      }
+    }
+    return null
+  }, [assetClass, side, plan])
+
   // Usa qty del RiskCalculator si el usuario no escribió nada todavía
   function handleUseSuggestedQty(suggested: number) {
     if (!qty) setQty(String(suggested))
@@ -175,70 +193,90 @@ export default function OrderForm({
     <div className="order-form">
       <div className="order-form__header">
         <span className="order-form__title">NUEVA ORDEN</span>
-        <span className="order-form__mode badge badge-paper">PAPER</span>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <select 
+            className="input-base" 
+            style={{ fontSize: '0.6rem', padding: '2px 4px', height: '20px', width: 'auto' }}
+            value={assetClass}
+            onChange={(e) => setAssetClass(e.target.value as any)}
+          >
+            <option value="equity">EQUITY</option>
+            <option value="crypto">CRIPTO</option>
+          </select>
+          <span className="order-form__mode badge badge-paper">PAPER</span>
+        </div>
       </div>
 
       <div className="order-form__body">
-        {/* Symbol */}
-        <div className="form-field" style={{ position: 'relative' }}>
-          <label className="form-label" htmlFor="of-symbol">SÍMBOLO / NOMBRE</label>
-          <div style={{ position: 'relative' }}>
+        {/* Symbol & Name Split */}
+        <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '12px' }}>
+          {/* Symbol */}
+          <div className="form-field" style={{ position: 'relative' }}>
+            <label className="form-label" htmlFor="of-symbol">SÍMBOLO</label>
+            <div style={{ position: 'relative' }}>
+              <input
+                id="of-symbol"
+                className={`input-base input-mono ${errors.symbol ? 'input-error' : ''}`}
+                value={symbol}
+                onChange={e => { 
+                  setSymbol(e.target.value.toUpperCase())
+                  setErrors(p => ({ ...p, symbol: undefined }))
+                  setShowSuggestions(true)
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                placeholder="AAPL..."
+                spellCheck={false}
+                autoCapitalize="characters"
+              />
+              {isSearching && (
+                <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
+                  <Loader2 size={12} className="animate-spin" color="var(--text-muted)" />
+                </div>
+              )}
+            </div>
+
+            {/* Suggestions Dropdown (Absolute to the whole row or just symbol?) */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="search-suggestions" style={{ width: '300px' }}>
+                {suggestions.map(s => (
+                  <div 
+                    key={s.symbol} 
+                    className="search-suggestion-item"
+                    onClick={() => {
+                      setSymbol(s.symbol)
+                      setCompanyName(s.name)
+                      setShowSuggestions(false)
+                    }}
+                  >
+                    <span className="suggestion-symbol">{s.symbol}</span>
+                    <span className="suggestion-name">{s.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {errors.symbol && <span className="form-error">{errors.symbol}</span>}
+          </div>
+
+          {/* Company Name */}
+          <div className="form-field">
+            <label className="form-label" htmlFor="of-name">NOMBRE DE COMPAÑÍA</label>
             <input
-              id="of-symbol"
-              className={`input-base input-mono ${errors.symbol ? 'input-error' : ''}`}
-              value={symbol}
-              onChange={e => { 
-                setSymbol(e.target.value.toUpperCase())
-                setErrors(p => ({ ...p, symbol: undefined }))
-                setShowSuggestions(true)
-              }}
-              onFocus={() => setShowSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-              placeholder="AAPL o Apple..."
+              id="of-name"
+              className="input-base"
+              value={companyName}
+              onChange={e => setCompanyName(e.target.value)}
+              placeholder="Nombre de la empresa..."
               spellCheck={false}
-              autoCapitalize="characters"
             />
-            {isSearching && (
-              <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
-                <Loader2 size={14} className="animate-spin" color="var(--text-muted)" />
+            {currentPrice && (
+              <div style={{ marginTop: '4px', textAlign: 'right' }}>
+                <span className="form-hint font-mono" style={{ margin: 0, fontSize: '11px', color: 'var(--color-primary)' }}>
+                  ${currentPrice.toFixed(2)}
+                </span>
               </div>
             )}
           </div>
-
-          {/* Suggestions Dropdown */}
-          {showSuggestions && suggestions.length > 0 && (
-            <div className="search-suggestions">
-              {suggestions.map(s => (
-                <div 
-                  key={s.symbol} 
-                  className="search-suggestion-item"
-                  onClick={() => {
-                    setSymbol(s.symbol)
-                    setCompanyName(s.name)
-                    setShowSuggestions(false)
-                  }}
-                >
-                  <span className="suggestion-symbol">{s.symbol}</span>
-                  <span className="suggestion-name">{s.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {errors.symbol && <span className="form-error">{errors.symbol}</span>}
-          
-          {(companyName || currentPrice) && (
-            <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                {companyName}
-              </span>
-              {currentPrice && (
-                <span className="form-hint font-mono" style={{ margin: 0 }}>
-                  ${currentPrice.toFixed(2)}
-                </span>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Side toggle */}
@@ -400,6 +438,24 @@ export default function OrderForm({
             side={side}
             onUse={handleUseSuggestedQty}
           />
+        )}
+
+        {/* Marea de Correlación Warning */}
+        {correlationWarning && (
+          <div style={{ 
+            background: 'rgba(239, 68, 68, 0.05)', 
+            border: '1px solid rgba(239, 68, 68, 0.2)', 
+            padding: '10px', 
+            borderRadius: '6px',
+            marginBottom: '4px'
+          }}>
+            <div style={{ color: 'var(--color-loss)', fontSize: '0.65rem', fontWeight: 800, marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <AlertTriangle size={12} /> {correlationWarning.title}
+            </div>
+            <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
+              {correlationWarning.message}
+            </p>
+          </div>
         )}
 
         {/* Botón revisar */}

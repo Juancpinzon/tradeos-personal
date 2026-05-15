@@ -1,6 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // src/components/portfolio/EquityChart.tsx — Gráfico histórico de equity (30d)
-// Recharts LineChart con gradiente azul, tooltip custom, ejes mínimos
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
@@ -18,21 +17,19 @@ interface EquityChartProps {
 }
 
 interface ChartPoint {
-  date:   string   // display label (eje X)
-  equity: number
+  date:    string
+  equity:  number
   rawDate: string
 }
-
-// ── Tooltip personalizado ──────────────────────────────────────────────────
 
 interface TooltipPayload {
   value: number
 }
 
 interface CustomTooltipProps {
-  active?: boolean
+  active?:  boolean
   payload?: TooltipPayload[]
-  label?:  string
+  label?:   string
 }
 
 function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
@@ -43,38 +40,33 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
     <div
       style={{
         backgroundColor: 'var(--bg-elevated)',
-        border: '1px solid var(--border-default)',
-        borderRadius: '0.375rem',
-        padding: '0.625rem 0.875rem',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+        border:          '1px solid var(--border-default)',
+        borderRadius:    '0.375rem',
+        padding:         '0.625rem 0.875rem',
+        boxShadow:       '0 4px 12px rgba(0,0,0,0.4)',
       }}
     >
       <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
         {label}
       </p>
-      <p
-        className="font-mono"
-        style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)' }}
-      >
+      <p className="font-mono" style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)' }}>
         {formatCurrency(equity)}
       </p>
     </div>
   )
 }
 
-// ── Componente principal ───────────────────────────────────────────────────
-
 export default function EquityChart({ snapshots }: EquityChartProps) {
   if (!snapshots.length) {
     return (
       <div
         style={{
-          height: '180px',
-          display: 'flex',
-          alignItems: 'center',
+          height:         '180px',
+          display:        'flex',
+          alignItems:     'center',
           justifyContent: 'center',
-          color: 'var(--text-muted)',
-          fontSize: '0.8125rem',
+          color:          'var(--text-muted)',
+          fontSize:       '0.8125rem',
         }}
       >
         Sin datos históricos
@@ -88,9 +80,8 @@ export default function EquityChart({ snapshots }: EquityChartProps) {
     rawDate: s.snapshot_at,
   }))
 
-  // Tomar solo uno de cada N para no saturar el eje X
-  const stride       = Math.ceil(data.length / 6)
-  const tickIndices  = data
+  const stride      = Math.max(1, Math.ceil(data.length / 6))
+  const tickIndices = data
     .map((_, i) => i)
     .filter((i) => i % stride === 0 || i === data.length - 1)
 
@@ -100,8 +91,11 @@ export default function EquityChart({ snapshots }: EquityChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <AreaChart data={data} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
-        {/* Definición del gradiente */}
+      <AreaChart
+        data={data}
+        // FIX: margen left/right para que los ticks extremos no se clipeen
+        margin={{ top: 8, right: 12, left: 12, bottom: 0 }}
+      >
         <defs>
           <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.18} />
@@ -109,7 +103,6 @@ export default function EquityChart({ snapshots }: EquityChartProps) {
           </linearGradient>
         </defs>
 
-        {/* Eje X: fechas abreviadas, sin línea */}
         <XAxis
           dataKey="date"
           ticks={ticks}
@@ -121,15 +114,15 @@ export default function EquityChart({ snapshots }: EquityChartProps) {
           axisLine={false}
           tickLine={false}
           dy={6}
+          // Forzar que los ticks no se clipeen fuera del SVG
+          allowDataOverflow={false}
         />
 
-        {/* Tooltip custom */}
         <Tooltip
           content={<CustomTooltip />}
           cursor={{ stroke: 'var(--border-default)', strokeWidth: 1 }}
         />
 
-        {/* Área con gradiente */}
         <Area
           type="monotone"
           dataKey="equity"

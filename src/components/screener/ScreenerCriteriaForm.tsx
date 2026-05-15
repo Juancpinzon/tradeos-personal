@@ -34,7 +34,7 @@ export function ScreenerCriteriaForm() {
 
   return (
     <div style={{
-      width: '280px',
+      width: '420px',
       flexShrink: 0,
       borderRight: '1px solid var(--border-default)',
       background: 'var(--bg-surface)',
@@ -112,17 +112,30 @@ export function ScreenerCriteriaForm() {
         flexDirection: 'column',
         gap: '20px'
       }}>
-        {/* Búsqueda por Nombre/Símbolo */}
-        <div style={sectionStyle}>
-          <label style={labelStyle}>Símbolo o Nombre</label>
-          <input
-            type="text"
-            name="symbol_query"
-            placeholder="Ej: AAPL, Apple..."
-            value={activeCriteria.symbol_query || ''}
-            onChange={handleChange}
-            style={inputStyle}
-          />
+        {/* Búsqueda por Símbolo / Nombre Split */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={sectionStyle}>
+            <label style={labelStyle}>Símbolo</label>
+            <input
+              type="text"
+              name="symbol_query"
+              placeholder="Ej: AAPL"
+              value={activeCriteria.symbol_query || ''}
+              onChange={handleChange}
+              style={inputStyle}
+            />
+          </div>
+          <div style={sectionStyle}>
+            <label style={labelStyle}>Nombre</label>
+            <input
+              type="text"
+              name="name_query"
+              placeholder="Ej: Apple"
+              value={(activeCriteria as any).name_query || ''}
+              onChange={handleChange}
+              style={inputStyle}
+            />
+          </div>
         </div>
 
         {/* Market Cap */}

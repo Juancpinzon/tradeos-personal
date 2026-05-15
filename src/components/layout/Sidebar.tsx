@@ -15,8 +15,11 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  ClipboardList,
+  GraduationCap,
 } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
+import { MarketPulse } from './MarketPulse'
 
 interface NavItem {
   to:    string
@@ -25,13 +28,15 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/',          label: 'Dashboard', Icon: LayoutDashboard },
-  { to: '/trading',   label: 'Trading',   Icon: TrendingUp      },
-  { to: '/research',  label: 'Research',  Icon: Search          },
-  { to: '/journal',   label: 'Journal',   Icon: BookOpen        },
-  { to: '/screener',  label: 'Screener',  Icon: Target          },
-  { to: '/history',   label: 'Historial', Icon: History         },
-  { to: '/settings',  label: 'Settings',  Icon: Settings        },
+  { to: '/',          label: 'Dashboard',     Icon: LayoutDashboard },
+  { to: '/trading',   label: 'Trading',       Icon: TrendingUp      },
+  { to: '/research',  label: 'Research',      Icon: Search          },
+  { to: '/journal',   label: 'Journal',       Icon: BookOpen        },
+  { to: '/flight-plan', label: 'Plan de Vuelo', Icon: ClipboardList  },
+  { to: '/academy',   label: 'Academia',      Icon: GraduationCap   },
+  { to: '/screener',  label: 'Screener',      Icon: Target          },
+  { to: '/history',   label: 'Historial',     Icon: History         },
+  { to: '/settings',  label: 'Settings',      Icon: Settings        },
 ]
 
 interface SidebarProps {
@@ -47,6 +52,7 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
 
   return (
     <aside
+      className="no-print"
       style={{
         width,
         minWidth: width,
@@ -264,6 +270,9 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
           )
         })}
       </nav>
+
+      {/* Market Pulse Ticker */}
+      {!isCollapsed && <MarketPulse />}
 
       {/* Footer: email + logout */}
       <div

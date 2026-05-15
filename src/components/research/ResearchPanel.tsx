@@ -283,8 +283,8 @@ function HistoryPanel({
 
 export function ResearchPanel() {
   const [symbolInput, setSymbolInput] = useState('')
+  const [companyNameInput, setCompanyNameInput] = useState('')
   const [queryInput, setQueryInput] = useState('')
-  const [selectedName, setSelectedName] = useState('')
   const analysisRef = useRef<HTMLDivElement>(null)
   const symbolRef = useRef<HTMLInputElement>(null)
 
@@ -330,7 +330,7 @@ export function ResearchPanel() {
   } = useResearch()
 
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const { suggestions } = useSymbolSearch(symbolInput)
+  const { suggestions } = useSymbolSearch(symbolInput || companyNameInput)
 
   const [searchParams] = useSearchParams()
 
@@ -341,9 +341,12 @@ export function ResearchPanel() {
     }
   }, [searchParams])
 
+  // Reset name if symbol cleared
   useEffect(() => {
-    if (!symbolInput) setSelectedName('')
-  }, [symbolInput])
+    if (!symbolInput && !companyNameInput) {
+      setCompanyNameInput('')
+    }
+  }, [symbolInput, companyNameInput])
 
   // Auto-scroll al final mientras llega el stream
   useEffect(() => {
@@ -354,9 +357,23 @@ export function ResearchPanel() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const sym = symbolInput.trim().toUpperCase()
-    const q   = queryInput.trim() || `Analizá ${sym}: ¿conviene mantener o hay mejor momento para entrar?`
-    if (sym) analyzeSymbol(sym, q)
+    let sym = symbolInput.trim().toUpperCase()
+    
+    // Si no hay símbolo pero hay nombre, intentar resolver desde sugerencias
+    if (!sym && companyNameInput.trim() && suggestions.length > 0) {
+      const bestMatch = suggestions[0]
+      if (bestMatch) {
+        sym = bestMatch.symbol
+        setSymbolInput(sym)
+        setCompanyNameInput(bestMatch.name)
+      }
+    }
+
+    const q = queryInput.trim() || `Analizá ${sym}: ¿conviene mantener o hay mejor momento para entrar?`
+    if (sym) {
+      analyzeSymbol(sym, q)
+      setShowSuggestions(false)
+    }
   }
 
   const hasResult = streamingText.length > 0
@@ -374,135 +391,162 @@ export function ResearchPanel() {
           flexShrink: 0,
         }}
       >
-        {/* Símbolo */}
-        <div style={{ position: 'relative', flexShrink: 0 }}>
-          <input
-            ref={symbolRef}
-            type="text"
-            value={symbolInput}
-            onChange={e => {
-              setSymbolInput(e.target.value.toUpperCase())
-              setShowSuggestions(true)
-            }}
-            onFocus={() => setShowSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-            placeholder="Símbolo..."
-            maxLength={20}
-            style={{
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-default)',
-              borderRadius: '6px',
-              color: 'var(--text-primary)',
-              padding: '9px 12px',
-              fontSize: '14px',
-              fontFamily: '"IBM Plex Mono", monospace',
-              fontWeight: 700,
-              width: '140px',
-              outline: 'none',
-              letterSpacing: '0.06em',
-              transition: 'border-color 150ms',
-            }}
-          />
-          
-          {/* Suggestions Dropdown */}
-          {showSuggestions && suggestions.length > 0 && (
-            <div style={dropdownStyle}>
-              {suggestions.map(s => (
-                <div 
-                  key={s.symbol} 
-                  style={suggestionItemStyle}
-                  onClick={() => {
-                    setSymbolInput(s.symbol)
-                    setSelectedName(s.name)
-                    setShowSuggestions(false)
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--color-primary)', fontSize: '12px' }}>{s.symbol}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
+        <div style={{ display: 'grid', gridTemplateColumns: '120px 240px 1fr', gap: '10px', width: '100%' }}>
+          {/* Símbolo */}
+          <div style={{ position: 'relative' }}>
+            <label style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', display: 'block', textTransform: 'uppercase' }}>SÍMBOLO</label>
+            <input
+              ref={symbolRef}
+              type="text"
+              value={symbolInput}
+              onChange={e => {
+                setSymbolInput(e.target.value.toUpperCase())
+                setShowSuggestions(true)
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+              placeholder="AAPL..."
+              maxLength={15}
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
+                borderRadius: '6px',
+                color: 'var(--text-primary)',
+                padding: '9px 12px',
+                fontSize: '14px',
+                fontFamily: '"IBM Plex Mono", monospace',
+                fontWeight: 700,
+                width: '100%',
+                outline: 'none',
+                letterSpacing: '0.06em',
+                transition: 'border-color 150ms',
+              }}
+            />
+            
+            {/* Suggestions Dropdown */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div style={{ ...dropdownStyle, width: '360px' }}>
+                {suggestions.map(s => (
+                  <div 
+                    key={s.symbol} 
+                    style={suggestionItemStyle}
+                    onClick={() => {
+                      setSymbolInput(s.symbol)
+                      setCompanyNameInput(s.name)
+                      setShowSuggestions(false)
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--color-primary)', fontSize: '12px' }}>{s.symbol}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {selectedName && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, padding: '2px 4px', fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
-              {selectedName}
+          {/* Nombre de Compañía */}
+          <div style={{ position: 'relative' }}>
+            <label style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', display: 'block', textTransform: 'uppercase' }}>NOMBRE DE COMPAÑÍA</label>
+            <input
+              type="text"
+              value={companyNameInput}
+              onChange={e => {
+                setCompanyNameInput(e.target.value)
+                setShowSuggestions(true)
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+              placeholder="Nombre de empresa..."
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
+                borderRadius: '6px',
+                color: 'var(--text-primary)',
+                padding: '9px 12px',
+                fontSize: '13px',
+                fontFamily: 'Syne, system-ui, sans-serif',
+                width: '100%',
+                outline: 'none',
+                transition: 'border-color 150ms',
+              }}
+            />
+          </div>
+
+          {/* Query */}
+          <div>
+            <label style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', display: 'block', textTransform: 'uppercase' }}>¿QUÉ QUIERES SABER?</label>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <textarea
+                value={queryInput}
+                onChange={e => setQueryInput(e.target.value)}
+                placeholder="¿Conviene mantener? ¿Hay catalizadores próximos?"
+                rows={1}
+                style={{
+                  flex: 1,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: '6px',
+                  color: 'var(--text-primary)',
+                  padding: '9px 12px',
+                  fontSize: '13px',
+                  fontFamily: 'Syne, system-ui, sans-serif',
+                  resize: 'none',
+                  outline: 'none',
+                  lineHeight: '1.5',
+                  transition: 'border-color 150ms',
+                }}
+                onFocus={e => { e.target.style.borderColor = 'var(--color-primary)' }}
+                onBlur={e => { e.target.style.borderColor = 'var(--border-default)' }}
+              />
+
+              {/* Botón */}
+              <button
+                type="submit"
+                disabled={(!symbolInput.trim() && !companyNameInput.trim()) || isLoading || isStreaming}
+                style={{
+                  background: 'var(--color-primary)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '9px 18px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  fontFamily: 'Syne, system-ui, sans-serif',
+                  cursor: isLoading || isStreaming ? 'not-allowed' : 'pointer',
+                  opacity: (isLoading || isStreaming || (!symbolInput.trim() && !companyNameInput.trim())) ? 0.6 : 1,
+                  letterSpacing: '0.03em',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'background 150ms',
+                }}
+                onMouseEnter={e => {
+                  if (!isLoading && !isStreaming)
+                    (e.currentTarget as HTMLElement).style.background = 'var(--color-primary-hover)'
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.background = 'var(--color-primary)'
+                }}
+              >
+                {isLoading || isStreaming ? (
+                  <>
+                    <LoadingSpinner />
+                    Analizando…
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: '14px' }}>🔍</span>
+                    Analizar
+                  </>
+                )}
+              </button>
             </div>
-          )}
+          </div>
         </div>
-
-        {/* Query */}
-        <textarea
-          value={queryInput}
-          onChange={e => setQueryInput(e.target.value)}
-          placeholder="¿Conviene mantener? ¿Hay catalizadores próximos? ¿Qué dicen los fundamentales?"
-          rows={2}
-          style={{
-            flex: 1,
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-default)',
-            borderRadius: '6px',
-            color: 'var(--text-primary)',
-            padding: '9px 12px',
-            fontSize: '13px',
-            fontFamily: 'Syne, system-ui, sans-serif',
-            resize: 'none',
-            outline: 'none',
-            lineHeight: '1.5',
-            transition: 'border-color 150ms',
-          }}
-          onFocus={e => { e.target.style.borderColor = 'var(--color-primary)' }}
-          onBlur={e => { e.target.style.borderColor = 'var(--border-default)' }}
-        />
-
-        {/* Botón */}
-        <button
-          type="submit"
-          disabled={!symbolInput.trim() || isLoading || isStreaming}
-          style={{
-            background: 'var(--color-primary)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            padding: '9px 18px',
-            fontSize: '13px',
-            fontWeight: 700,
-            fontFamily: 'Syne, system-ui, sans-serif',
-            cursor: isLoading || isStreaming ? 'not-allowed' : 'pointer',
-            opacity: isLoading || isStreaming ? 0.6 : 1,
-            letterSpacing: '0.03em',
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'background 150ms',
-            alignSelf: 'stretch',
-          }}
-          onMouseEnter={e => {
-            if (!isLoading && !isStreaming)
-              (e.currentTarget as HTMLElement).style.background = 'var(--color-primary-hover)'
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.background = 'var(--color-primary)'
-          }}
-        >
-          {isLoading ? (
-            <LoadingSpinner />
-          ) : isStreaming ? (
-            <>
-              <LoadingSpinner />
-              Analizando…
-            </>
-          ) : (
-            <>
-              <span style={{ fontSize: '14px' }}>🔍</span>
-              Analizar
-            </>
-          )}
-        </button>
       </form>
 
       {/* ── Error ─────────────────────────────────────────────────────────── */}
