@@ -8,6 +8,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { KpiGrid } from "./KpiGrid";
 import { TradingViewWidget } from "./TradingViewWidget";
 import { PortfolioContextPanel } from "./PortfolioContextPanel";
@@ -43,6 +44,7 @@ function renderAnalysis(text: string, isStreaming: boolean) {
       }}
     >
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
           h1: ({ children }) => <div style={MD_HEADING_STYLE}>{children}</div>,
           h2: ({ children }) => <div style={MD_HEADING_STYLE}>{children}</div>,
