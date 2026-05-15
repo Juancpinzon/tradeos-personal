@@ -1,8 +1,13 @@
-import { useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { useScreenerStore } from '../stores/screenerStore';
-import type { ScreenerCriteria, ScreenerPreset, ScreenerResult } from '../types';
-import { useAuth } from './useAuth';
+import { useState } from "react";
+import { supabase } from "../lib/supabase";
+import { useScreenerStore } from "../stores/screenerStore";
+import type {
+  ScreenerCriteria,
+  ScreenerPreset,
+  ScreenerResult,
+} from "../types";
+import { useAuth } from "./useAuth";
+import { useState, useEffect } from "react"; // agrega useEffect
 
 export function useScreener() {
   const { user } = useAuth();
@@ -10,21 +15,25 @@ export function useScreener() {
   const [presets, setPresets] = useState<ScreenerPreset[]>([]);
   const [isLoadingPresets, setIsLoadingPresets] = useState(false);
 
+  useEffect(() => {
+    if (user) void getPresets();
+  }, [user?.id]);
+
   const getPresets = async () => {
     if (!user) return [];
     setIsLoadingPresets(true);
     try {
       const { data, error } = await supabase
-        .from('screener_presets')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name');
-      
+        .from("screener_presets")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("name");
+
       if (error) throw error;
       setPresets(data || []);
       return data || [];
     } catch (err) {
-      console.error('Error fetching presets:', err);
+      console.error("Error fetching presets:", err);
       return [];
     } finally {
       setIsLoadingPresets(false);
@@ -35,21 +44,21 @@ export function useScreener() {
     if (!user) return null;
     try {
       const { data, error } = await supabase
-        .from('screener_presets')
+        .from("screener_presets")
         .insert({
           user_id: user.id,
           name,
-          criteria
+          criteria,
         })
         .select()
         .single();
-      
+
       if (error) throw error;
       await getPresets();
       store.setPresetId(data.id);
       return data;
     } catch (err) {
-      console.error('Error saving preset:', err);
+      console.error("Error saving preset:", err);
       return null;
     }
   };
@@ -61,7 +70,7 @@ export function useScreener() {
 
   const runScreener = async (criteria: ScreenerCriteria) => {
     if (!user) return;
-    
+
     store.setIsRunning(true);
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -70,24 +79,24 @@ export function useScreener() {
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-screener`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ criteria })
-        }
+          body: JSON.stringify({ criteria }),
+        },
       );
 
       if (!response.ok) {
-        throw new Error('Screener execution failed');
+        throw new Error("Screener execution failed");
       }
 
       const result: ScreenerResult = await response.json();
       store.setLastResult(result);
       return result;
     } catch (err) {
-      console.error('Error running screener:', err);
+      console.error("Error running screener:", err);
       return null;
     } finally {
       store.setIsRunning(false);
@@ -101,6 +110,6 @@ export function useScreener() {
     savePreset,
     loadPreset,
     runScreener,
-    ...store
+    ...store,
   };
 }
