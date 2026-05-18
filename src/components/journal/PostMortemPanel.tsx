@@ -70,9 +70,7 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
   const [whatWentRight,   setWhatWentRight]   = useState(entry.what_went_right           ?? '')
   const [whatWentWrong,   setWhatWentWrong]   = useState(entry.what_went_wrong           ?? '')
   const [lesson,          setLesson]          = useState(entry.lesson                    ?? '')
-  const [followedPlan,    setFollowedPlan]    = useState<boolean | null>(
-    entry.outcome !== undefined ? entry.followed_plan : null
-  )
+  const [followedPlan,    setFollowedPlan]    = useState<boolean | null>(entry.followed_plan ?? null)
   const [postEmotional,   setPostEmotional]   = useState<PostEmotionalState | ''>(entry.post_emotional_state ?? '')
 
   const borderColor =
@@ -82,7 +80,6 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
     'var(--border-default)'
 
   const isValid = outcome !== '' && followedPlan !== null
-  const isReadOnly = entry.outcome !== undefined  // ya tiene post-mortem
 
   const handleSave = () => {
     if (!outcome || followedPlan === null) return
@@ -125,7 +122,7 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
             >
               {entry.side.toUpperCase()}
             </span>
-            {isReadOnly && (
+            {entry.outcome !== undefined && (
               <span className="badge" style={{
                 backgroundColor: 'rgba(16,185,129,0.1)',
                 color: '#10b981',
@@ -226,8 +223,7 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
                 return (
                   <button
                     key={value}
-                    onClick={() => !isReadOnly && setOutcome(selected ? '' : value)}
-                    disabled={isReadOnly}
+                    onClick={() => setOutcome(selected ? '' : value)}
                     style={{
                       flex: 1,
                       padding: '0.625rem 0.5rem',
@@ -237,11 +233,10 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
                       color: selected ? color : 'var(--text-muted)',
                       fontSize: '0.8125rem',
                       fontWeight: selected ? 700 : 400,
-                      cursor: isReadOnly ? 'default' : 'pointer',
+                      cursor: 'pointer',
                       transition: 'all 150ms ease',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem',
                       fontFamily: '"Syne", sans-serif',
-                      opacity: isReadOnly ? 0.85 : 1,
                     }}
                   >
                     {icon} {label}
@@ -263,7 +258,6 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
                 className="input-base font-mono"
                 style={{ marginTop: '0.375rem' }}
                 step="0.01"
-                disabled={isReadOnly}
               />
             </div>
             <div>
@@ -276,7 +270,6 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
                 className="input-base font-mono"
                 style={{ marginTop: '0.375rem' }}
                 step="0.01"
-                disabled={isReadOnly}
               />
             </div>
           </div>
@@ -322,7 +315,6 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
               placeholder="Stop hit, target alcanzado, cambio de tesis..."
               className="input-base"
               style={{ marginTop: '0.375rem' }}
-              disabled={isReadOnly}
             />
           </div>
 
@@ -336,7 +328,6 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
               rows={2}
               className="input-base"
               style={{ resize: 'vertical', marginTop: '0.375rem', lineHeight: 1.6 }}
-              disabled={isReadOnly}
             />
           </div>
 
@@ -350,7 +341,6 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
               rows={2}
               className="input-base"
               style={{ resize: 'vertical', marginTop: '0.375rem', lineHeight: 1.6 }}
-              disabled={isReadOnly}
             />
           </div>
 
@@ -364,7 +354,6 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
               rows={2}
               className="input-base"
               style={{ resize: 'vertical', marginTop: '0.375rem', lineHeight: 1.6 }}
-              disabled={isReadOnly}
             />
           </div>
 
@@ -382,8 +371,7 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
                 return (
                   <button
                     key={String(value)}
-                    onClick={() => !isReadOnly && setFollowedPlan(selected ? null : value)}
-                    disabled={isReadOnly}
+                    onClick={() => setFollowedPlan(selected ? null : value)}
                     style={{
                       flex: 1,
                       padding: '0.5rem',
@@ -393,10 +381,9 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
                       color: selected ? color : 'var(--text-muted)',
                       fontSize: '0.8125rem',
                       fontWeight: selected ? 600 : 400,
-                      cursor: isReadOnly ? 'default' : 'pointer',
+                      cursor: 'pointer',
                       transition: 'all 150ms ease',
                       fontFamily: '"Syne", sans-serif',
-                      opacity: isReadOnly ? 0.85 : 1,
                     }}
                   >
                     {label}
@@ -415,8 +402,7 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
                 return (
                   <button
                     key={value}
-                    onClick={() => !isReadOnly && setPostEmotional(selected ? '' : value)}
-                    disabled={isReadOnly}
+                    onClick={() => setPostEmotional(selected ? '' : value)}
                     style={{
                       padding: '0.375rem 0.875rem',
                       borderRadius: '9999px',
@@ -425,10 +411,9 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
                       color: selected ? 'var(--color-primary)' : 'var(--text-muted)',
                       fontSize: '0.8125rem',
                       fontWeight: selected ? 600 : 400,
-                      cursor: isReadOnly ? 'default' : 'pointer',
+                      cursor: 'pointer',
                       transition: 'all 150ms ease',
                       fontFamily: '"Syne", sans-serif',
-                      opacity: isReadOnly ? 0.85 : 1,
                     }}
                   >
                     {emoji} {label}
@@ -467,19 +452,17 @@ export default function PostMortemPanel({ entry, onSave, onClose }: PostMortemPa
               fontWeight: 500,
             }}
           >
-            {isReadOnly ? 'Cerrar' : 'Cancelar'}
+            Cancelar
           </button>
         )}
-        {!isReadOnly && (
-          <button
-            onClick={handleSave}
-            disabled={!isValid}
-            className="btn-primary"
-            style={{ flex: 2 }}
-          >
-            Guardar post-mortem
-          </button>
-        )}
+        <button
+          onClick={handleSave}
+          disabled={!isValid}
+          className="btn-primary"
+          style={{ flex: 2 }}
+        >
+          Guardar post-mortem
+        </button>
       </div>
     </div>
   )
