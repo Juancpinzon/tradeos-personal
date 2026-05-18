@@ -52,9 +52,13 @@ export default function FlightPlan() {
         </div>
         {plan && (
           <div className="page-header__right">
-            <span className={`badge ${plan.checklist_completed ? 'badge-success' : 'badge-warning'}`}>
-              {plan.checklist_completed ? 'LISTO PARA DESPEGAR' : 'PRE-VUELO EN PROGRESO'}
-            </span>
+            {plan.daily_lesson ? (
+              <span className="badge badge-neutral">SESIÓN CERRADA</span>
+            ) : plan.checklist_completed ? (
+              <span className="badge badge-success">LISTO PARA DESPEGAR</span>
+            ) : (
+              <span className="badge badge-warning">PRE-VUELO EN PROGRESO</span>
+            )}
           </div>
         )}
       </header>
@@ -102,6 +106,11 @@ export default function FlightPlan() {
           background: rgba(245, 158, 11, 0.1);
           color: var(--color-warning);
           border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+        .badge-neutral {
+          background: rgba(107, 114, 128, 0.15);
+          color: var(--text-secondary);
+          border: 1px solid rgba(107, 114, 128, 0.25);
         }
       `}</style>
     </div>

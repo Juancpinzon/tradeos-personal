@@ -95,7 +95,14 @@ export function useFlightPlan() {
       if (result.error) throw result.error
       return result.data
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      // Aplicar el update al cache inmediatamente para que la UI refleje el cambio
+      // sin esperar el round-trip de la invalidación
+      queryClient.setQueryData<FlightPlan | null>(
+        ['flight-plan', todayStr],
+        (old) => old ? { ...old, ...variables } : old
+      )
+      // Invalidar para re-fetch en background y confirmar consistencia
       queryClient.invalidateQueries({ queryKey: ['flight-plan', todayStr] })
     },
     onError: (err) => {
