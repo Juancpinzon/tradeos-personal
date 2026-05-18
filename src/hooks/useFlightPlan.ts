@@ -7,10 +7,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { FlightPlan, FlightPlanCandidate } from '../types'
 
+function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export function useFlightPlan() {
   const queryClient = useQueryClient()
   const now = new Date()
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const todayStr = toLocalDateStr(now)
+  const tomorrowDate = new Date(now)
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1)
+  const tomorrowStr = toLocalDateStr(tomorrowDate)
 
   // 1. Obtener plan de hoy
   const { data: plan, isLoading, error } = useQuery<FlightPlan | null>({
@@ -29,6 +36,27 @@ export function useFlightPlan() {
       if (error && error.code !== 'PGRST116') throw error
       return data as FlightPlan
     }
+  })
+
+  // 1b. Verificar si ya existe plan para mañana
+  const { data: tomorrowPlan } = useQuery<FlightPlan | null>({
+    queryKey: ['flight-plan', tomorrowStr],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return null
+
+      const { data, error } = await supabase
+        .from('flight_plans')
+        .select('id, date')
+        .eq('user_id', user.id)
+        .eq('date', tomorrowStr)
+        .maybeSingle()
+
+      if (error && error.code !== 'PGRST116') throw error
+      return data as FlightPlan
+    },
+    // Solo consultar cuando la sesión de hoy esté cerrada
+    enabled: !!plan?.daily_lesson
   })
 
   // 2. Obtener lección del plan anterior
@@ -110,7 +138,35 @@ export function useFlightPlan() {
     }
   })
 
-  // 5. Gestión de candidatos
+  // 5. Crear plan para mañana
+  const createTomorrowPlan = useMutation({
+    mutationFn: async (market: FlightPlan['market']) => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No autenticado')
+
+      const { data, error } = await supabase
+        .from('flight_plans')
+        .insert({
+          user_id: user.id,
+          date: tomorrowStr,
+          market,
+          max_operations: 5
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['flight-plan', tomorrowStr] })
+    },
+    onError: (err) => {
+      console.error('[useFlightPlan] createTomorrowPlan failed:', err)
+    }
+  })
+
+  // 6. Gestión de candidatos
   const addCandidate = useMutation({
     mutationFn: async (candidate: Partial<FlightPlanCandidate>) => {
       if (!plan?.id) throw new Error('Plan no inicializado')
@@ -159,6 +215,7 @@ export function useFlightPlan() {
   return {
     plan,
     lastPlan,
+    tomorrowPlan: tomorrowPlan ?? null,
     isLoading,
     error,
     initPlan: initPlan.mutateAsync,
@@ -166,7 +223,9 @@ export function useFlightPlan() {
     addCandidate: addCandidate.mutateAsync,
     updateCandidate: updateCandidate.mutateAsync,
     deleteCandidate: deleteCandidate.mutateAsync,
+    createTomorrowPlan: createTomorrowPlan.mutateAsync,
     isInitializing: initPlan.isPending,
-    isUpdating: updatePlan.isPending
+    isUpdating: updatePlan.isPending,
+    isCreatingTomorrow: createTomorrowPlan.isPending
   }
 }

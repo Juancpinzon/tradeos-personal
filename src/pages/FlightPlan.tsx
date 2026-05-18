@@ -8,19 +8,23 @@ import { useNavigate } from 'react-router-dom'
 import { useFlightPlan } from '../hooks/useFlightPlan'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { FlightPlanForm } from '../components/flight-plan/FlightPlanForm'
+import { FlightPlanClosedView } from '../components/flight-plan/FlightPlanClosedView'
 import { Loader2 } from 'lucide-react'
 
 export default function FlightPlan() {
   const navigate = useNavigate()
-  const { 
-    plan, 
-    lastPlan, 
-    isLoading: isPlanLoading, 
-    initPlan, 
-    updatePlan, 
+  const {
+    plan,
+    lastPlan,
+    tomorrowPlan,
+    isLoading: isPlanLoading,
+    initPlan,
+    updatePlan,
     addCandidate,
-    deleteCandidate, 
-    isInitializing 
+    deleteCandidate,
+    createTomorrowPlan,
+    isInitializing,
+    isCreatingTomorrow
   } = useFlightPlan()
 
   const { positions, isLoading: isPortfolioLoading } = usePortfolio()
@@ -63,17 +67,26 @@ export default function FlightPlan() {
         )}
       </header>
 
-      <FlightPlanForm 
-        plan={plan ?? null}
-        lastPlan={lastPlan ?? null}
-        positions={positions}
-        onInit={initPlan}
-        onUpdate={updatePlan}
-        onAddCandidate={addCandidate}
-        onDeleteCandidate={deleteCandidate}
-        onNavigateToResearch={handleNavigateToResearch}
-        isInitializing={isInitializing}
-      />
+      {plan?.daily_lesson ? (
+        <FlightPlanClosedView
+          plan={plan}
+          tomorrowPlanExists={!!tomorrowPlan}
+          isCreatingTomorrow={isCreatingTomorrow}
+          onCreateTomorrow={createTomorrowPlan}
+        />
+      ) : (
+        <FlightPlanForm
+          plan={plan ?? null}
+          lastPlan={lastPlan ?? null}
+          positions={positions}
+          onInit={initPlan}
+          onUpdate={updatePlan}
+          onAddCandidate={addCandidate}
+          onDeleteCandidate={deleteCandidate}
+          onNavigateToResearch={handleNavigateToResearch}
+          isInitializing={isInitializing}
+        />
+      )}
 
       <style>{`
         .page-container {
