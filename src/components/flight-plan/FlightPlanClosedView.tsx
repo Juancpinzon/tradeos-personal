@@ -3,100 +3,136 @@
 // Vista de solo-lectura para una sesión ya cerrada + acción de crear plan de mañana
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
+import { useState } from "react";
 import {
-  CheckCircle2, TrendingUp, TrendingDown, Target, Brain,
-  Heart, ListChecks, ChevronRight, Loader2, CalendarPlus
-} from 'lucide-react'
-import { formatCurrency } from '../../lib/formatters'
-import type { FlightPlan } from '../../types'
+  CheckCircle2,
+  TrendingUp,
+  Target,
+  Brain,
+  Heart,
+  ListChecks,
+  ChevronRight,
+  Loader2,
+  CalendarPlus,
+} from "lucide-react";
+import { formatCurrency } from "../../lib/formatters";
+import type { FlightPlan } from "../../types";
 
 interface Props {
-  plan: FlightPlan
-  tomorrowPlanExists: boolean
-  isCreatingTomorrow: boolean
-  onCreateTomorrow: (market: FlightPlan['market']) => Promise<void>
+  plan: FlightPlan;
+  tomorrowPlanExists: boolean;
+  isCreatingTomorrow: boolean;
+  onCreateTomorrow: (market: FlightPlan["market"]) => Promise<void>;
 }
 
-const EMOTION_LABEL: Record<NonNullable<FlightPlan['emotional_state_close']>, string> = {
-  satisfied:   '😌 Satisfecho / En paz',
-  neutral:     '😐 Neutral',
-  frustrated:  '😤 Frustrado',
-  anxious:     '😰 Ansioso',
-  overexcited: '🤩 Eufórico',
-}
+const EMOTION_LABEL: Record<
+  NonNullable<FlightPlan["emotional_state_close"]>,
+  string
+> = {
+  satisfied: "😌 Satisfecho / En paz",
+  neutral: "😐 Neutral",
+  frustrated: "😤 Frustrado",
+  anxious: "😰 Ansioso",
+  overexcited: "🤩 Eufórico",
+};
 
-const FOLLOWED_LABEL: Record<NonNullable<FlightPlan['followed_plan']>, { label: string; color: string }> = {
-  yes:     { label: 'Sí, al 100%',    color: 'var(--color-profit)'   },
-  partial: { label: 'Parcialmente',   color: 'var(--color-warning)'  },
-  no:      { label: 'No lo seguí',    color: 'var(--color-loss)'     },
-}
+const FOLLOWED_LABEL: Record<
+  NonNullable<FlightPlan["followed_plan"]>,
+  { label: string; color: string }
+> = {
+  yes: { label: "Sí, al 100%", color: "var(--color-profit)" },
+  partial: { label: "Parcialmente", color: "var(--color-warning)" },
+  no: { label: "No lo seguí", color: "var(--color-loss)" },
+};
 
-const MARKET_LABEL: Record<FlightPlan['market'], string> = {
-  NYSE:   'NYSE / NASDAQ',
-  crypto: 'Cripto',
-  both:   'Multimercado',
-}
+const MARKET_LABEL: Record<FlightPlan["market"], string> = {
+  NYSE: "NYSE / NASDAQ",
+  crypto: "Cripto",
+  both: "Multimercado",
+};
 
-export function FlightPlanClosedView({ plan, tomorrowPlanExists, isCreatingTomorrow, onCreateTomorrow }: Props) {
-  const [tomorrowMarket, setTomorrowMarket] = useState<FlightPlan['market']>(plan.market)
-  const [created, setCreated] = useState(tomorrowPlanExists)
+export function FlightPlanClosedView({
+  plan,
+  tomorrowPlanExists,
+  isCreatingTomorrow,
+  onCreateTomorrow,
+}: Props) {
+  const [tomorrowMarket, setTomorrowMarket] = useState<FlightPlan["market"]>(
+    plan.market,
+  );
+  const [created, setCreated] = useState(tomorrowPlanExists);
 
-  const pnl = plan.pnl_total ?? 0
-  const won = plan.trades_won ?? 0
-  const lost = plan.trades_lost ?? 0
-  const total = won + lost
-  const winRate = total > 0 ? Math.round((won / total) * 100) : null
+  const pnl = plan.pnl_total ?? 0;
+  const won = plan.trades_won ?? 0;
+  const lost = plan.trades_lost ?? 0;
+  const total = won + lost;
+  const winRate = total > 0 ? Math.round((won / total) * 100) : null;
 
-  const candidates = plan.candidates ?? []
-  const executedCount = candidates.filter(c => c.executed).length
+  const candidates = plan.candidates ?? [];
+  const executedCount = candidates.filter((c) => c.executed).length;
 
-  const followedInfo = plan.followed_plan ? FOLLOWED_LABEL[plan.followed_plan] : null
+  const followedInfo = plan.followed_plan
+    ? FOLLOWED_LABEL[plan.followed_plan]
+    : null;
 
   const handleCreateTomorrow = async () => {
-    await onCreateTomorrow(tomorrowMarket)
-    setCreated(true)
-  }
+    await onCreateTomorrow(tomorrowMarket);
+    setCreated(true);
+  };
 
   return (
     <div className="fpcv">
-
       {/* ── Header de estado ── */}
       <div className="fpcv__status-bar">
         <CheckCircle2 size={18} color="var(--color-profit)" />
-        <span>Sesión del <strong>
-          {new Date(plan.date + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </strong> — {MARKET_LABEL[plan.market]}</span>
+        <span>
+          Sesión del{" "}
+          <strong>
+            {new Date(plan.date + "T12:00:00").toLocaleDateString("es-AR", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}
+          </strong>{" "}
+          — {MARKET_LABEL[plan.market]}
+        </span>
         <span className="fpcv__status-chip">SESIÓN CERRADA</span>
       </div>
 
       <div className="fpcv__body">
-
         {/* ── Columna izquierda: métricas del día ── */}
         <div className="fpcv__col">
-
           {/* KPIs */}
           <section className="fpcv__card">
             <h3 className="fpcv__card-title">RESULTADOS DEL DÍA</h3>
             <div className="fpcv__kpi-grid">
               <div className="fpcv__kpi">
-                <span className="fpcv__kpi-label"><TrendingUp size={11} /> PnL TOTAL</span>
-                <span className={`fpcv__kpi-value font-mono ${pnl > 0 ? 'profit' : pnl < 0 ? 'loss' : 'neutral'}`}>
-                  {pnl > 0 ? '+' : ''}{formatCurrency(pnl)}
+                <span className="fpcv__kpi-label">
+                  <TrendingUp size={11} /> PnL TOTAL
+                </span>
+                <span
+                  className={`fpcv__kpi-value font-mono ${pnl > 0 ? "profit" : pnl < 0 ? "loss" : "neutral"}`}
+                >
+                  {pnl > 0 ? "+" : ""}
+                  {formatCurrency(pnl)}
                 </span>
               </div>
               <div className="fpcv__kpi">
-                <span className="fpcv__kpi-label"><Target size={11} /> TRADES</span>
+                <span className="fpcv__kpi-label">
+                  <Target size={11} /> TRADES
+                </span>
                 <span className="fpcv__kpi-value font-mono">
                   <span className="profit">{won}W</span>
-                  {' / '}
+                  {" / "}
                   <span className="loss">{lost}L</span>
                 </span>
               </div>
               {winRate !== null && (
                 <div className="fpcv__kpi">
                   <span className="fpcv__kpi-label">WIN RATE</span>
-                  <span className={`fpcv__kpi-value font-mono ${winRate >= 50 ? 'profit' : 'loss'}`}>
+                  <span
+                    className={`fpcv__kpi-value font-mono ${winRate >= 50 ? "profit" : "loss"}`}
+                  >
                     {winRate}%
                   </span>
                 </div>
@@ -104,7 +140,10 @@ export function FlightPlanClosedView({ plan, tomorrowPlanExists, isCreatingTomor
               {followedInfo && (
                 <div className="fpcv__kpi">
                   <span className="fpcv__kpi-label">SEGUÍ EL PLAN</span>
-                  <span className="fpcv__kpi-value" style={{ color: followedInfo.color }}>
+                  <span
+                    className="fpcv__kpi-value"
+                    style={{ color: followedInfo.color }}
+                  >
                     {followedInfo.label}
                   </span>
                 </div>
@@ -115,24 +154,38 @@ export function FlightPlanClosedView({ plan, tomorrowPlanExists, isCreatingTomor
           {/* Estado emocional */}
           {plan.emotional_state_close && (
             <section className="fpcv__card">
-              <h3 className="fpcv__card-title"><Heart size={12} /> ESTADO EMOCIONAL AL CIERRE</h3>
-              <p className="fpcv__emotion">{EMOTION_LABEL[plan.emotional_state_close]}</p>
+              <h3 className="fpcv__card-title">
+                <Heart size={12} /> ESTADO EMOCIONAL AL CIERRE
+              </h3>
+              <p className="fpcv__emotion">
+                {EMOTION_LABEL[plan.emotional_state_close]}
+              </p>
             </section>
           )}
 
           {/* Candidatos */}
           {candidates.length > 0 && (
             <section className="fpcv__card">
-              <h3 className="fpcv__card-title"><ListChecks size={12} /> CANDIDATOS ({executedCount}/{candidates.length} ejecutados)</h3>
+              <h3 className="fpcv__card-title">
+                <ListChecks size={12} /> CANDIDATOS ({executedCount}/
+                {candidates.length} ejecutados)
+              </h3>
               <div className="fpcv__candidates">
-                {candidates.map(c => (
-                  <div key={c.id} className={`fpcv__candidate ${c.executed ? 'fpcv__candidate--executed' : ''}`}>
+                {candidates.map((c) => (
+                  <div
+                    key={c.id}
+                    className={`fpcv__candidate ${c.executed ? "fpcv__candidate--executed" : ""}`}
+                  >
                     <div className="fpcv__candidate-left">
                       <span className="fpcv__candidate-symbol">{c.symbol}</span>
-                      <span className="fpcv__candidate-setup">{c.setup_type}</span>
+                      <span className="fpcv__candidate-setup">
+                        {c.setup_type}
+                      </span>
                     </div>
-                    <span className={`fpcv__candidate-status ${c.executed ? 'profit' : 'neutral'}`}>
-                      {c.executed ? 'EJECUTADO' : 'NO EJECUTADO'}
+                    <span
+                      className={`fpcv__candidate-status ${c.executed ? "profit" : "neutral"}`}
+                    >
+                      {c.executed ? "EJECUTADO" : "NO EJECUTADO"}
                     </span>
                   </div>
                 ))}
@@ -143,11 +196,14 @@ export function FlightPlanClosedView({ plan, tomorrowPlanExists, isCreatingTomor
 
         {/* ── Columna derecha: lección + crear mañana ── */}
         <div className="fpcv__col">
-
           {/* Lección del día */}
           <section className="fpcv__card fpcv__card--lesson">
-            <h3 className="fpcv__card-title"><Brain size={12} /> LECCIÓN DEL DÍA</h3>
-            <blockquote className="fpcv__lesson">"{plan.daily_lesson}"</blockquote>
+            <h3 className="fpcv__card-title">
+              <Brain size={12} /> LECCIÓN DEL DÍA
+            </h3>
+            <blockquote className="fpcv__lesson">
+              "{plan.daily_lesson}"
+            </blockquote>
           </section>
 
           {/* Crear plan de mañana */}
@@ -155,8 +211,12 @@ export function FlightPlanClosedView({ plan, tomorrowPlanExists, isCreatingTomor
             <div className="fpcv__tomorrow-header">
               <CalendarPlus size={20} color="var(--color-primary)" />
               <div>
-                <h3 className="fpcv__card-title" style={{ marginBottom: 2 }}>PLAN DE MAÑANA</h3>
-                <p className="fpcv__tomorrow-desc">Preparate para la próxima sesión</p>
+                <h3 className="fpcv__card-title" style={{ marginBottom: 2 }}>
+                  PLAN DE MAÑANA
+                </h3>
+                <p className="fpcv__tomorrow-desc">
+                  Preparate para la próxima sesión
+                </p>
               </div>
             </div>
 
@@ -169,7 +229,12 @@ export function FlightPlanClosedView({ plan, tomorrowPlanExists, isCreatingTomor
               <>
                 <div className="fpcv__field">
                   <label>Mercado del día siguiente</label>
-                  <select value={tomorrowMarket} onChange={e => setTomorrowMarket(e.target.value as FlightPlan['market'])}>
+                  <select
+                    value={tomorrowMarket}
+                    onChange={(e) =>
+                      setTomorrowMarket(e.target.value as FlightPlan["market"])
+                    }
+                  >
                     <option value="NYSE">NYSE / NASDAQ</option>
                     <option value="crypto">Cripto</option>
                     <option value="both">Ambos</option>
@@ -180,15 +245,20 @@ export function FlightPlanClosedView({ plan, tomorrowPlanExists, isCreatingTomor
                   onClick={handleCreateTomorrow}
                   disabled={isCreatingTomorrow}
                 >
-                  {isCreatingTomorrow
-                    ? <><Loader2 size={15} className="spin" /> CREANDO...</>
-                    : <><span>CREAR PLAN DE MAÑANA</span><ChevronRight size={15} /></>
-                  }
+                  {isCreatingTomorrow ? (
+                    <>
+                      <Loader2 size={15} className="spin" /> CREANDO...
+                    </>
+                  ) : (
+                    <>
+                      <span>CREAR PLAN DE MAÑANA</span>
+                      <ChevronRight size={15} />
+                    </>
+                  )}
                 </button>
               </>
             )}
           </section>
-
         </div>
       </div>
 
@@ -422,5 +492,5 @@ export function FlightPlanClosedView({ plan, tomorrowPlanExists, isCreatingTomor
         .spin { animation: spin 0.8s linear infinite; }
       `}</style>
     </div>
-  )
+  );
 }
