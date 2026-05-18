@@ -14,6 +14,7 @@ import PostMortemPanel from '../components/journal/PostMortemPanel'
 import { Plus, Loader2 } from 'lucide-react'
 
 import { useJournal } from '../hooks/useJournal'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
 // ─── Panel mode type ──────────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ export default function Journal() {
   const { entries, isLoading, addEntry, updateEntry } = useJournal()
   const [panelMode,     setPanelMode]     = useState<PanelMode>(null)
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null)
+  const isMobile = useMediaQuery('(max-width: 767px)')
 
   // IDs de entradas vinculadas a una orden sin outcome todavía
   const pendingPostMortems = entries
@@ -60,11 +62,13 @@ export default function Journal() {
 
   return (
     <div style={{
-      display:   'flex',
+      display:       'flex',
       flexDirection: 'column',
-      height:    '100%',
-      position:  'relative',
-      overflow:  'hidden',
+      position:      'relative',
+      ...(isMobile
+        ? { minHeight: '100%' }
+        : { height: '100%', overflow: 'hidden' }
+      ),
     }}>
 
       {/* ── Header ──────────────────────────────────────────────────── */}
@@ -134,19 +138,24 @@ export default function Journal() {
       )}
 
       {/* ── Main: Lista + Stats ──────────────────────────────────────── */}
-      <div style={{
-        flex:               1,
-        display:            'grid',
+      <div style={isMobile ? {
+        display:       'flex',
+        flexDirection: 'column',
+      } : {
+        flex:                1,
+        display:             'grid',
         gridTemplateColumns: '3fr 2fr',
-        overflow:           'hidden',
-        minHeight:          0,
+        overflow:            'hidden',
+        minHeight:           0,
       }}>
 
-        {/* Columna izquierda — JournalList */}
-        <div style={{
-          borderRight: '1px solid var(--border-subtle)',
-          overflow:    'hidden',
-          display:     'flex',
+        {/* Entries list */}
+        <div style={isMobile ? {
+          borderBottom:  '1px solid var(--border-subtle)',
+        } : {
+          borderRight:   '1px solid var(--border-subtle)',
+          overflow:      'hidden',
+          display:       'flex',
           flexDirection: 'column',
         }}>
           <JournalList
@@ -156,8 +165,8 @@ export default function Journal() {
           />
         </div>
 
-        {/* Columna derecha — JournalStats */}
-        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        {/* Stats — full-width below list on mobile */}
+        <div style={{ overflowY: isMobile ? undefined : 'auto', display: 'flex', flexDirection: 'column' }}>
           <div style={{
             padding:      '1rem 1.25rem 0.75rem',
             borderBottom: '1px solid var(--border-subtle)',
@@ -198,9 +207,9 @@ export default function Journal() {
             position:        'fixed',
             top:             0,
             right:           0,
-            bottom:          0,
-            width:           '500px',
-            maxWidth:        '95vw',
+            bottom:          isMobile ? '56px' : 0,
+            width:           isMobile ? '100vw' : '500px',
+            maxWidth:        isMobile ? '100vw' : '95vw',
             backgroundColor: 'var(--bg-base)',
             borderLeft:      '1px solid var(--border-default)',
             zIndex:          50,

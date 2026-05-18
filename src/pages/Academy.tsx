@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Book, Target, ShieldAlert, Clock, BarChart3, Download } from 'lucide-react'
 import { STRATEGIES, GLOSSARY } from '../data/strategies'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
 export default function Academy() {
   const [selectedId, setSelectedId] = useState(STRATEGIES[0]?.id || '')
   const strategy = STRATEGIES.find(s => s.id === selectedId) || STRATEGIES[0]
+  const isMobile = useMediaQuery('(max-width: 767px)')
 
   if (!strategy) {
     return (
@@ -15,11 +17,11 @@ export default function Academy() {
   }
 
   return (
-    <div style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
-      <header style={{ marginBottom: '2rem' }}>
+    <div style={{ padding: isMobile ? '1rem' : '1.5rem 2rem', maxWidth: '1200px', width: '100%', boxSizing: 'border-box' }}>
+      <header style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
           <Book size={24} className="text-primary" />
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.5rem' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: isMobile ? '1.125rem' : '1.5rem' }}>
             ACADEMIA DE ESTRATEGIAS
           </h1>
         </div>
@@ -28,7 +30,15 @@ export default function Academy() {
         </p>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '2rem' }}>
+      <div style={isMobile ? {
+        display:       'flex',
+        flexDirection: 'column',
+        gap:           '1.25rem',
+      } : {
+        display:             'grid',
+        gridTemplateColumns: '280px 1fr',
+        gap:                 '2rem',
+      }}>
         {/* Sidebar de Estrategias */}
         <aside style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {STRATEGIES.map(s => (
@@ -70,7 +80,7 @@ export default function Academy() {
             </h2>
             <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{strategy.description}</p>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: '0.75rem' }}>
               <div className="academy-stat">
                 <BarChart3 size={14} />
                 <span>Capital: {strategy.capital_req}</span>
@@ -86,7 +96,15 @@ export default function Academy() {
             </div>
           </section>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+          <div style={isMobile ? {
+            display:       'flex',
+            flexDirection: 'column',
+            gap:           '1.5rem',
+          } : {
+            display:             'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap:                 '1.5rem',
+          }}>
             {/* Setups */}
             <section>
               <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -146,7 +164,7 @@ export default function Academy() {
             <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '1.25rem', textTransform: 'uppercase' }}>
               Glosario de Términos
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
               {GLOSSARY.map((item, i) => (
                 <div key={i} style={{ borderLeft: '2px solid var(--border-subtle)', paddingLeft: '1rem' }}>
                   <div style={{ fontWeight: 700, fontSize: '0.8125rem', color: 'var(--text-primary)' }}>{item.term}</div>
