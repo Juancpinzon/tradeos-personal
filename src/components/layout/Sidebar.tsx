@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // src/components/layout/Sidebar.tsx — Barra lateral colapsable
-// 220px expandido, 60px colapsado (solo íconos)
+// Desktop: sticky, 220px expandido / 60px colapsado (solo íconos)
+// Mobile:  fixed overlay drawer, slides in from left
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NavLink } from 'react-router-dom'
@@ -17,6 +18,7 @@ import {
   LogOut,
   ClipboardList,
   GraduationCap,
+  X,
 } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { MarketPulse } from './MarketPulse'
@@ -28,15 +30,15 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/',          label: 'Dashboard',     Icon: LayoutDashboard },
-  { to: '/trading',   label: 'Trading',       Icon: TrendingUp      },
-  { to: '/research',  label: 'Research',      Icon: Search          },
-  { to: '/journal',   label: 'Journal',       Icon: BookOpen        },
-  { to: '/flight-plan', label: 'Plan de Vuelo', Icon: ClipboardList  },
-  { to: '/academy',   label: 'Academia',      Icon: GraduationCap   },
-  { to: '/screener',  label: 'Screener',      Icon: Target          },
-  { to: '/history',   label: 'Historial',     Icon: History         },
-  { to: '/settings',  label: 'Settings',      Icon: Settings        },
+  { to: '/',            label: 'Dashboard',     Icon: LayoutDashboard },
+  { to: '/trading',     label: 'Trading',       Icon: TrendingUp      },
+  { to: '/research',    label: 'Research',      Icon: Search          },
+  { to: '/journal',     label: 'Journal',       Icon: BookOpen        },
+  { to: '/flight-plan', label: 'Plan de Vuelo', Icon: ClipboardList   },
+  { to: '/academy',     label: 'Academia',      Icon: GraduationCap   },
+  { to: '/screener',    label: 'Screener',      Icon: Target          },
+  { to: '/history',     label: 'Historial',     Icon: History         },
+  { to: '/settings',    label: 'Settings',      Icon: Settings        },
 ]
 
 interface SidebarProps {
@@ -45,44 +47,75 @@ interface SidebarProps {
   user:                User | null
   onSignOut:           () => void
   pendingPostMortems?: number
+  isMobile:            boolean
+  isDrawerOpen:        boolean
+  onDrawerClose:       () => void
 }
 
-export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendingPostMortems = 0 }: SidebarProps) {
-  const width = isCollapsed ? '60px' : '220px'
+export default function Sidebar({
+  isCollapsed,
+  onToggle,
+  user,
+  onSignOut,
+  pendingPostMortems = 0,
+  isMobile,
+  isDrawerOpen,
+  onDrawerClose,
+}: SidebarProps) {
+  // On mobile: always full-width drawer (260px), ignore collapse state
+  const desktopWidth = isCollapsed ? '60px' : '220px'
+  const expanded = isMobile ? true : !isCollapsed
+
+  const sidebarStyle: React.CSSProperties = isMobile
+    ? {
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        width: '260px',
+        minWidth: '260px',
+        maxWidth: '260px',
+        height: '100vh',
+        zIndex: 100,
+        transform: isDrawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 250ms cubic-bezier(0.4, 0, 0.2, 1)',
+      }
+    : {
+        width: desktopWidth,
+        minWidth: desktopWidth,
+        maxWidth: desktopWidth,
+        position: 'sticky',
+        top: 0,
+        transition: 'width 200ms ease, min-width 200ms ease, max-width 200ms ease',
+      }
 
   return (
     <aside
       className="no-print"
       style={{
-        width,
-        minWidth: width,
-        maxWidth: width,
         height: '100vh',
         backgroundColor: 'var(--bg-surface)',
         borderRight: '1px solid var(--border-default)',
         display: 'flex',
         flexDirection: 'column',
-        transition: 'width 200ms ease, min-width 200ms ease, max-width 200ms ease',
         overflow: 'hidden',
-        position: 'sticky',
-        top: 0,
         flexShrink: 0,
+        ...sidebarStyle,
       }}
     >
-      {/* Header: Logo + Badge PAPER + Toggle */}
+      {/* Header: Logo + PAPER badge + toggle/close button */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: isCollapsed ? 'center' : 'space-between',
-          padding: isCollapsed ? '1rem 0' : '1rem 0.75rem',
+          justifyContent: expanded ? 'space-between' : 'center',
+          padding: expanded ? '1rem 0.75rem' : '1rem 0',
           borderBottom: '1px solid var(--border-subtle)',
           minHeight: '60px',
           gap: '0.5rem',
         }}
       >
-        {!isCollapsed && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
+        {expanded && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden', flex: 1 }}>
             <span
               style={{
                 fontFamily: '"Syne", sans-serif',
@@ -95,7 +128,6 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
             >
               Trade<span style={{ color: 'var(--color-primary)' }}>OS</span>
             </span>
-            {/* Badge PAPER — siempre visible */}
             <span
               id="paper-badge"
               className="badge badge-paper"
@@ -106,8 +138,8 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
           </div>
         )}
 
-        {/* Badge PAPER colapsado — solo ícono */}
-        {isCollapsed && (
+        {/* Collapsed PAPER badge (desktop only) */}
+        {!expanded && !isMobile && (
           <span
             id="paper-badge-collapsed"
             title="Modo paper trading"
@@ -130,41 +162,63 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
           </span>
         )}
 
-        {/* Toggle button */}
-        <button
-          id="sidebar-toggle"
-          onClick={onToggle}
-          title={isCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '24px',
-            height: '24px',
-            borderRadius: '4px',
-            border: '1px solid var(--border-default)',
-            backgroundColor: 'transparent',
-            color: 'var(--text-muted)',
-            cursor: 'pointer',
-            flexShrink: 0,
-            transition: 'background-color 150ms ease, color 150ms ease',
-          }}
-          onMouseEnter={(e) => {
-            const el = e.currentTarget
-            el.style.backgroundColor = 'var(--bg-elevated)'
-            el.style.color = 'var(--text-primary)'
-          }}
-          onMouseLeave={(e) => {
-            const el = e.currentTarget
-            el.style.backgroundColor = 'transparent'
-            el.style.color = 'var(--text-muted)'
-          }}
-        >
-          {isCollapsed
-            ? <ChevronRight size={14} strokeWidth={2} />
-            : <ChevronLeft  size={14} strokeWidth={2} />
-          }
-        </button>
+        {/* Mobile: close (X) button; Desktop: collapse toggle */}
+        {isMobile ? (
+          <button
+            onClick={onDrawerClose}
+            aria-label="Cerrar menú"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '28px',
+              height: '28px',
+              borderRadius: '4px',
+              border: '1px solid var(--border-default)',
+              backgroundColor: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        ) : (
+          <button
+            id="sidebar-toggle"
+            onClick={onToggle}
+            title={isCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '24px',
+              height: '24px',
+              borderRadius: '4px',
+              border: '1px solid var(--border-default)',
+              backgroundColor: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              transition: 'background-color 150ms ease, color 150ms ease',
+            }}
+            onMouseEnter={(e) => {
+              const el = e.currentTarget
+              el.style.backgroundColor = 'var(--bg-elevated)'
+              el.style.color = 'var(--text-primary)'
+            }}
+            onMouseLeave={(e) => {
+              const el = e.currentTarget
+              el.style.backgroundColor = 'transparent'
+              el.style.color = 'var(--text-muted)'
+            }}
+          >
+            {isCollapsed
+              ? <ChevronRight size={14} strokeWidth={2} />
+              : <ChevronLeft  size={14} strokeWidth={2} />
+            }
+          </button>
+        )}
       </div>
 
       {/* Nav links */}
@@ -188,18 +242,19 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
               key={to}
               to={to}
               end={to === '/'}
+              onClick={isMobile ? onDrawerClose : undefined}
               className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
               style={{
-                justifyContent: isCollapsed ? 'center' : 'flex-start',
-                padding: isCollapsed ? '0.5rem' : '0.5rem 0.75rem',
+                justifyContent: expanded ? 'flex-start' : 'center',
+                padding: expanded ? '0.5rem 0.75rem' : '0.5rem',
               }}
-              title={isCollapsed ? label : undefined}
+              title={expanded ? undefined : label}
             >
               {/* Icon wrapper — relative for collapsed dot badge */}
               <span style={{ flexShrink: 0, display: 'flex', position: 'relative' }}>
                 <Icon size={18} strokeWidth={1.75} />
                 {/* Collapsed badge: small dot overlay */}
-                {showBadge && isCollapsed && (
+                {showBadge && !expanded && (
                   <span
                     aria-label={`${pendingPostMortems} post-mortems pendientes`}
                     style={{
@@ -227,7 +282,7 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
               </span>
 
               {/* Label + expanded badge */}
-              {!isCollapsed && (
+              {expanded && (
                 <span style={{
                   overflow:     'hidden',
                   textOverflow: 'ellipsis',
@@ -238,7 +293,6 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
                   gap:          '0.375rem',
                 }}>
                   {label}
-                  {/* Expanded badge: amber pill after the label */}
                   {showBadge && (
                     <span
                       aria-label={`${pendingPostMortems} post-mortems pendientes`}
@@ -271,8 +325,8 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
         })}
       </nav>
 
-      {/* Market Pulse Ticker */}
-      {!isCollapsed && <MarketPulse />}
+      {/* Market Pulse Ticker — only when expanded */}
+      {expanded && <MarketPulse />}
 
       {/* Footer: email + logout */}
       <div
@@ -284,7 +338,7 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
           gap: '0.25rem',
         }}
       >
-        {!isCollapsed && user?.email && (
+        {expanded && user?.email && (
           <p
             style={{
               fontSize: '0.6875rem',
@@ -305,9 +359,9 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
           style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: isCollapsed ? 'center' : 'flex-start',
+            justifyContent: expanded ? 'flex-start' : 'center',
             gap: '0.625rem',
-            padding: isCollapsed ? '0.5rem' : '0.5rem 0.75rem',
+            padding: expanded ? '0.5rem 0.75rem' : '0.5rem',
             width: '100%',
             border: 'none',
             borderRadius: '0.375rem',
@@ -331,7 +385,7 @@ export default function Sidebar({ isCollapsed, onToggle, user, onSignOut, pendin
           }}
         >
           <LogOut size={16} strokeWidth={1.75} style={{ flexShrink: 0 }} />
-          {!isCollapsed && <span>Cerrar sesión</span>}
+          {expanded && <span>Cerrar sesión</span>}
         </button>
       </div>
     </aside>

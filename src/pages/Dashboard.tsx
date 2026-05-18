@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useEarnings } from '../hooks/useEarnings'
 import { useFlightPlan } from '../hooks/useFlightPlan'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import EquityChart from '../components/portfolio/EquityChart'
 import PortfolioDoctor from '../components/portfolio/PortfolioDoctor'
 import PositionCard from '../components/portfolio/PositionCard'
@@ -31,6 +32,7 @@ function PortfolioSummary({
   alpacaEquity,
   binanceEquity,
   isSyncing,
+  isMobile,
 }: {
   equity:         number
   cash:           number
@@ -40,6 +42,7 @@ function PortfolioSummary({
   alpacaEquity:   number
   binanceEquity:  number
   isSyncing:      boolean
+  isMobile:       boolean
 }) {
   const pnlColor    = pnl_today >= 0 ? '#10b981' : '#ef4444'
   const pnlPositive = pnl_today >= 0
@@ -50,14 +53,14 @@ function PortfolioSummary({
         display: 'flex',
         flexDirection: 'column',
         gap: '1rem',
-        padding: '1.25rem 1.5rem',
+        padding: isMobile ? '1rem' : '1.25rem 1.5rem',
         borderBottom: '1px solid var(--border-subtle)',
         backgroundColor: 'var(--bg-surface)',
       }}
     >
-      {/* Fila superior: equity total + syncing badge */}
+      {/* Fila superior: equity total + PnL hoy */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
             Equity Total
           </p>
@@ -65,10 +68,11 @@ function PortfolioSummary({
             style={{
               fontFamily: '"Syne", sans-serif',
               fontWeight: 700,
-              fontSize: '2rem',
+              fontSize: isMobile ? '1.75rem' : '2rem',
               color: 'var(--text-primary)',
               letterSpacing: '-0.02em',
               lineHeight: 1,
+              whiteSpace: 'nowrap',
             }}
             className="font-display"
           >
@@ -77,12 +81,12 @@ function PortfolioSummary({
         </div>
 
         {/* PnL hoy */}
-        <div style={{ textAlign: 'right' }}>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
             PnL Hoy
           </p>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-            <span className="font-mono" style={{ fontSize: '1.375rem', fontWeight: 600, color: pnlColor }}>
+            <span className="font-mono" style={{ fontSize: isMobile ? '1.125rem' : '1.375rem', fontWeight: 600, color: pnlColor }}>
               {pnlPositive ? '+' : ''}{formatCurrency(pnl_today)}
             </span>
             <span className="font-mono" style={{ fontSize: '0.875rem', color: pnlColor }}>
@@ -95,7 +99,7 @@ function PortfolioSummary({
       {/* Métricas secundarias + brokers */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
         {/* Cash + Buying power */}
-        <div style={{ display: 'flex', gap: '2rem' }}>
+        <div style={{ display: 'flex', gap: isMobile ? '1.25rem' : '2rem', flexWrap: 'wrap' }}>
           <div>
             <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.125rem' }}>Cash</p>
             <span className="font-mono" style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
@@ -200,6 +204,7 @@ export default function Dashboard() {
   const { events: earningsEvents } = useEarnings()
   const [doctorOpen, setDoctorOpen] = useState(false)
   const navigate = useNavigate()
+  const isMobile = useMediaQuery('(max-width: 767px)')
 
   // Nunca bloquear el render con spinner de página completa.
   // Cada sección muestra su propio skeleton mientras carga.
@@ -230,7 +235,7 @@ export default function Dashboard() {
 
   return (
     <>
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', ...(isMobile ? { minHeight: '100%' } : { height: '100%' }) }}>
       {/* Portfolio Summary */}
       {isLoading || !account ? (
         <SkeletonSummary />
@@ -244,12 +249,16 @@ export default function Dashboard() {
           alpacaEquity={alpacaEquity}
           binanceEquity={binanceEquity}
           isSyncing={isSyncing}
+          isMobile={isMobile}
         />
       )}
 
-      {/* Contenido principal: dos columnas */}
+      {/* Contenido principal */}
       <div
-        style={{
+        style={isMobile ? {
+          display: 'flex',
+          flexDirection: 'column',
+        } : {
           flex: 1,
           display: 'grid',
           gridTemplateColumns: '420px 1fr',
@@ -258,9 +267,12 @@ export default function Dashboard() {
           minHeight: 0,
         }}
       >
-        {/* ── Columna izquierda: Posiciones ── */}
+        {/* ── Posiciones ── */}
         <div
-          style={{
+          style={isMobile ? {
+            padding: '0 1rem 1.25rem',
+            borderBottom: '1px solid var(--border-subtle)',
+          } : {
             borderRight: '1px solid var(--border-subtle)',
             overflowY: 'auto',
             padding: '0 1.5rem',
@@ -276,7 +288,6 @@ export default function Dashboard() {
               paddingTop: '1.25rem',
               paddingBottom: '0.75rem',
               borderBottom: '1px solid var(--border-subtle)',
-              marginBottom: '0',
             }}
           >
             <h2
@@ -317,7 +328,7 @@ export default function Dashboard() {
             ))
           )}
 
-          {/* Portfolio Doctor — activo en Fase 5 */}
+          {/* Portfolio Doctor */}
           <div style={{ padding: '1.25rem 0' }}>
             <CosmicButton
               as="button"
@@ -330,9 +341,18 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Columna derecha: Chart + Eventos ── */}
-        <div style={{ overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
+        {/* ── Chart + Eventos ── */}
+        <div style={{
+          ...(isMobile ? {
+            padding: '1.25rem 1rem',
+          } : {
+            overflowY: 'auto',
+            padding: '1.25rem 1.5rem',
+          }),
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1.5rem',
+        }}>
           {/* Flight Plan Progress */}
           {plan && (
             <div style={{ marginBottom: '0.5rem' }}>
@@ -358,7 +378,7 @@ export default function Dashboard() {
             <EquityChart snapshots={equitySnapshots} />
           </div>
 
-          {/* Próximos Eventos — Earnings Calendar real */}
+          {/* Próximos Eventos */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.875rem' }}>
               <h2
