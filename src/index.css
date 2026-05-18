@@ -46,6 +46,55 @@
   color-scheme: dark;
 }
 
+/* ── shadcn/ui CSS Variables — dark, mapeadas al design system de TradeOS ── */
+:root {
+  --background: #0a0e17;
+  --foreground: #f9fafb;
+  --card: #111827;
+  --card-foreground: #f9fafb;
+  --popover: #1f2937;
+  --popover-foreground: #f9fafb;
+  --primary: #3b82f6;
+  --primary-foreground: #f9fafb;
+  --secondary: #1f2937;
+  --secondary-foreground: #f9fafb;
+  --muted: #1f2937;
+  --muted-foreground: #9ca3af;
+  --accent: #374151;
+  --accent-foreground: #f9fafb;
+  --destructive: #ef4444;
+  --border: #374151;
+  --input: #1f2937;
+  --ring: #3b82f6;
+  --radius: 0.5rem;
+}
+
+/* Tailwind v4: mapea las CSS vars de shadcn a utilidades (bg-primary, text-muted, etc.) */
+@theme inline {
+  --color-background:         var(--background);
+  --color-foreground:         var(--foreground);
+  --color-card:               var(--card);
+  --color-card-foreground:    var(--card-foreground);
+  --color-popover:            var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary:            var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary:          var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:              var(--muted);
+  --color-muted-foreground:   var(--muted-foreground);
+  --color-accent:             var(--accent);
+  --color-accent-foreground:  var(--accent-foreground);
+  --color-destructive:        var(--destructive);
+  --color-border:             var(--border);
+  --color-input:              var(--input);
+  --color-ring:               var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 /* ── Reset Global ───────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -108,6 +157,22 @@ html, body, #root {
       display: none !important;
     }
   }
+}
+
+/* ── Cult UI — Keyframes requeridos por cosmic-button ───────────────── */
+@keyframes cosmic-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes cosmic-spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-360deg); }
+}
+@utility animate-cosmic-spin {
+  animation: cosmic-spin 3s linear infinite;
+}
+@utility animate-cosmic-spin-slow {
+  animation: cosmic-spin-slow 5s linear infinite;
 }
 
 /* ── Componentes Base ───────────────────────────────────────────────── */

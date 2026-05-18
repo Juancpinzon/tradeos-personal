@@ -5,7 +5,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, type FormEvent } from 'react'
+import { motion } from 'motion/react'
 import { supabase } from '../lib/supabase'
+import { CosmicButton } from '../components/ui/cosmic-button'
+import { TextAnimate } from '../components/ui/text-animate'
 
 export default function Login() {
   const [email, setEmail]       = useState('')
@@ -44,7 +47,10 @@ export default function Login() {
       <div style={{ width: '100%', maxWidth: '400px' }}>
         {/* Logo / Brand */}
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-          <h1
+          <motion.h1
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
             style={{
               fontFamily: '"Syne", sans-serif',
               fontWeight: 700,
@@ -55,18 +61,20 @@ export default function Login() {
             }}
           >
             Trade<span style={{ color: 'var(--color-primary)' }}>OS</span>
-          </h1>
-          <p
+          </motion.h1>
+          <TextAnimate
+            text="Personal Trading Platform"
+            type="calmInUp"
+            delay={0.3}
             style={{
               fontFamily: '"Syne", sans-serif',
               fontSize: '0.8125rem',
               color: 'var(--text-muted)',
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
+              justifyContent: 'center',
             }}
-          >
-            Personal Trading Platform
-          </p>
+          />
         </div>
 
         {/* Card de login */}
@@ -172,22 +180,22 @@ export default function Login() {
             )}
 
             {/* Submit */}
-            <button
+            <CosmicButton
+              as="button"
               id="login-submit"
               type="submit"
               disabled={isLoading || !email || !password}
-              className="btn-primary"
-              style={{ marginTop: '0.5rem' }}
+              className="w-full mt-2"
             >
               {isLoading ? (
-                <>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Spinner />
                   Verificando...
-                </>
+                </span>
               ) : (
                 'Acceder'
               )}
-            </button>
+            </CosmicButton>
           </form>
         </div>
 

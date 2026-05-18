@@ -16,6 +16,7 @@ import {
   formatCurrency,
   formatPercent,
 } from '../lib/formatters'
+import { CosmicButton } from '../components/ui/cosmic-button'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PortfolioSummary — Equity total + métricas secundarias + PnL del día
@@ -318,38 +319,14 @@ export default function Dashboard() {
 
           {/* Portfolio Doctor — activo en Fase 5 */}
           <div style={{ padding: '1.25rem 0' }}>
-            <button
+            <CosmicButton
+              as="button"
               id="portfolio-doctor-btn"
               onClick={() => setDoctorOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '0.625rem 1rem',
-                width: '100%',
-                borderRadius: '0.375rem',
-                border: '1px solid rgba(59,130,246,0.35)',
-                backgroundColor: 'rgba(59,130,246,0.07)',
-                color: 'var(--color-primary)',
-                fontSize: '0.8125rem',
-                fontFamily: '"Syne", sans-serif',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'background-color 150ms, border-color 150ms',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.15)'
-                e.currentTarget.style.borderColor = 'rgba(59,130,246,0.6)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.07)'
-                e.currentTarget.style.borderColor = 'rgba(59,130,246,0.35)'
-              }}
+              className="w-full"
             >
-              <span>🩺</span>
-              <span>Portfolio Doctor</span>
-              <span style={{ marginLeft: 'auto', fontSize: '0.5625rem', opacity: 0.7 }}>IA ›</span>
-            </button>
+              🩺 Portfolio Doctor — IA
+            </CosmicButton>
           </div>
         </div>
 

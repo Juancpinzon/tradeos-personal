@@ -61,7 +61,7 @@ export default function OrderForm({
   const [target, setTarget] = useState("");
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [companyName, setCompanyName] = useState("");
+  const [_companyName, setCompanyName] = useState("");
   const [assetClass, setAssetClass] = useState<"equity" | "crypto">("equity");
   const { suggestions, isLoading: isSearching } = useSymbolSearch(symbol);
   const { plan } = useFlightPlan();
@@ -303,8 +303,8 @@ export default function OrderForm({
               <span className="form-error">{errors.symbol}</span>
             )}
           </div>
+        </div>
 
-          
         {/* Side toggle */}
         <div className="form-field">
           <label className="form-label">DIRECCIÓN</label>

@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useRef, useEffect } from "react";
+import { motion } from "motion/react";
 import { useSearchParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -17,6 +18,8 @@ import { useSymbolSearch } from "../../hooks/useSymbolSearch";
 import type { ResearchEntry } from "../../types";
 import { formatDate } from "../../lib/formatters";
 import { RotateCcw, ExternalLink, Copy, Download, Trash2 } from "lucide-react";
+import { CosmicButton } from "@/components/ui/cosmic-button";
+import { TextAnimate } from "@/components/ui/text-animate";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Estilos de Markdown compartidos
@@ -701,59 +704,28 @@ export function ResearchPanel() {
               />
 
               {/* Botón */}
-              <button
+              <CosmicButton
+                as="button"
                 type="submit"
                 disabled={
                   (!symbolInput.trim() && !companyNameInput.trim()) ||
                   isLoading ||
                   isStreaming
                 }
-                style={{
-                  background: "var(--color-primary)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "6px",
-                  padding: "9px 18px",
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  fontFamily: "Syne, system-ui, sans-serif",
-                  cursor: isLoading || isStreaming ? "not-allowed" : "pointer",
-                  opacity:
-                    isLoading ||
-                    isStreaming ||
-                    (!symbolInput.trim() && !companyNameInput.trim())
-                      ? 0.6
-                      : 1,
-                  letterSpacing: "0.03em",
-                  flexShrink: 0,
-                  whiteSpace: "nowrap",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  transition: "background 150ms",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLoading && !isStreaming)
-                    (e.currentTarget as HTMLElement).style.background =
-                      "var(--color-primary-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background =
-                    "var(--color-primary)";
-                }}
+                className="shrink-0"
               >
                 {isLoading || isStreaming ? (
-                  <>
+                  <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <LoadingSpinner />
                     Analizando…
-                  </>
+                  </span>
                 ) : (
-                  <>
-                    <span style={{ fontSize: "14px" }}>🔍</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span>🔍</span>
                     Analizar
-                  </>
+                  </span>
                 )}
-              </button>
+              </CosmicButton>
             </div>
           </div>
         </div>
@@ -1215,24 +1187,41 @@ function EmptyState() {
       }}
     >
       <div style={{ fontSize: "40px", opacity: 0.4 }}>🔍</div>
-      <div
+
+      <TextAnimate
+        text="Ingresá un símbolo y consultá al Research Agent"
+        type="calmInUp"
         style={{
           fontSize: "14px",
           fontFamily: "Syne, system-ui, sans-serif",
           fontWeight: 600,
           color: "var(--text-secondary)",
+          justifyContent: "center",
+          textAlign: "center",
+          maxWidth: "360px",
         }}
-      >
-        Ingresá un símbolo y consultá al Research Agent
-      </div>
-      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-        Análisis con fundamentales FMP + técnicos Alpaca + tu exposición en el
-        portafolio
-      </div>
+      />
+
+      <TextAnimate
+        text="Análisis con fundamentales FMP + técnicos Alpaca + tu exposición en el portafolio"
+        type="fadeInUp"
+        delay={0.4}
+        style={{
+          fontSize: "12px",
+          color: "var(--text-muted)",
+          justifyContent: "center",
+          textAlign: "center",
+          maxWidth: "420px",
+        }}
+      />
+
       <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
-        {suggestions.map((s) => (
-          <span
+        {suggestions.map((s, i) => (
+          <motion.span
             key={s}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 + i * 0.08, duration: 0.3, ease: "easeOut" }}
             style={{
               background: "var(--bg-elevated)",
               border: "1px solid var(--border-default)",
@@ -1242,10 +1231,11 @@ function EmptyState() {
               fontFamily: '"IBM Plex Mono", monospace',
               fontWeight: 700,
               color: "var(--text-secondary)",
+              display: "inline-block",
             }}
           >
             {s}
-          </span>
+          </motion.span>
         ))}
       </div>
     </div>
