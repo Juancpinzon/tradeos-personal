@@ -9,7 +9,8 @@ import type { FlightPlan, FlightPlanCandidate } from '../types'
 
 export function useFlightPlan() {
   const queryClient = useQueryClient()
-  const todayStr = new Date().toISOString().split('T')[0]
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
   // 1. Obtener plan de hoy
   const { data: plan, isLoading, error } = useQuery<FlightPlan | null>({
@@ -79,16 +80,26 @@ export function useFlightPlan() {
   // 4. Actualizar campos del plan
   const updatePlan = useMutation({
     mutationFn: async (updates: Partial<FlightPlan>) => {
-      if (!plan?.id) return
-      const { error } = await supabase
+      if (!plan?.id) {
+        console.warn('[useFlightPlan] updatePlan: plan.id is undefined, aborting update')
+        return
+      }
+      console.log('[useFlightPlan] updatePlan — id:', plan.id, '| updates:', updates)
+      const result = await supabase
         .from('flight_plans')
         .update(updates)
         .eq('id', plan.id)
-
-      if (error) throw error
+        .select()
+        .single()
+      console.log('[useFlightPlan] Supabase response:', result)
+      if (result.error) throw result.error
+      return result.data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['flight-plan', todayStr] })
+    },
+    onError: (err) => {
+      console.error('[useFlightPlan] updatePlan failed:', err)
     }
   })
 

@@ -9,7 +9,7 @@ import type { FlightPlan } from '../../types'
 
 interface Props {
   plan: FlightPlan
-  onSave: (updates: Partial<FlightPlan>) => void
+  onSave: (updates: Partial<FlightPlan>) => Promise<void> | void
   onClose: () => void
 }
 
@@ -21,16 +21,25 @@ export function FlightPlanSummary({ plan, onSave, onClose }: Props) {
   const [followed, setFollowed] = useState<FlightPlan['followed_plan']>(plan.followed_plan || 'yes')
   const [emotion, setEmotion] = useState<FlightPlan['emotional_state_close']>(plan.emotional_state_close || 'satisfied')
 
-  const handleSave = () => {
-    onSave({
-      pnl_total: parseFloat(pnl) || 0,
-      trades_won: parseInt(won) || 0,
-      trades_lost: parseInt(lost) || 0,
-      daily_lesson: lesson.trim(),
-      followed_plan: followed,
-      emotional_state_close: emotion
-    })
-    onClose()
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      await onSave({
+        pnl_total: parseFloat(pnl) || 0,
+        trades_won: parseInt(won) || 0,
+        trades_lost: parseInt(lost) || 0,
+        daily_lesson: lesson.trim(),
+        followed_plan: followed,
+        emotional_state_close: emotion
+      })
+      onClose()
+    } catch (err) {
+      console.error('[FlightPlanSummary] handleSave error:', err)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -111,13 +120,13 @@ export function FlightPlanSummary({ plan, onSave, onClose }: Props) {
 
         <div className="fp-summary-modal__footer">
           <button className="fp-btn fp-btn--secondary" onClick={onClose}>CANCELAR</button>
-          <button 
-            className="fp-btn fp-btn--primary" 
+          <button
+            className="fp-btn fp-btn--primary"
             onClick={handleSave}
-            disabled={!lesson.trim()}
+            disabled={!lesson.trim() || isSaving}
           >
             <Save size={16} />
-            GUARDAR Y CERRAR
+            {isSaving ? 'GUARDANDO...' : 'GUARDAR Y CERRAR'}
           </button>
         </div>
       </div>

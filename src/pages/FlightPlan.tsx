@@ -46,7 +46,7 @@ export default function FlightPlan() {
           <h1 className="page-title">PLAN DE VUELO</h1>
           <p className="page-subtitle">
             {plan 
-              ? `Sesión del ${new Date(plan.date).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}` 
+              ? `Sesión del ${new Date(plan.date + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}`
               : 'Preparación pre-sesión'}
           </p>
         </div>
