@@ -97,7 +97,9 @@ Deno.serve(async (req: Request) => {
 
   const totalEvaluated = universe.length;
   const symbols = universe.map((u) => u.symbol);
-
+  console.log(
+    `[SCREENER] Universe: ${universe.length} | Symbols: ${symbols.slice(0, 5).join(",")}`,
+  );
   // ── Step B: Fundamentals cache ──────────────────────────────────────────────
   const { data: cachedFunds } = await supabase
     .from("fundamentals_cache")
@@ -135,7 +137,9 @@ Deno.serve(async (req: Request) => {
       }),
     );
   }
-
+  console.log(
+    `[SCREENER] Cache hits: ${cacheMap.size} | Missing: ${missingSymbols.length}`,
+  );
   // ── Step C: Limitar candidatos para Claude ──────────────────────────────────
   // Priorizar por revenue_growth_pct descendente, máximo 10 para evitar timeout
   const candidates = universe
@@ -152,7 +156,7 @@ Deno.serve(async (req: Request) => {
       return bGrowth - aGrowth;
     })
     .slice(0, 10);
-
+  console.log(`[SCREENER] Candidates after filter: ${candidates.length}`);
   // ── Step D: Portfolio context ───────────────────────────────────────────────
   const { data: positions } = await supabase
     .from("positions")
