@@ -26,6 +26,47 @@ function okJson(data: unknown) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Types matching DB schema
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface FundamentalsRow {
+  symbol: string;
+  eps_current: number | null;
+  eps_next_estimate: number | null;
+  eps_growth_next_pct: number | null;
+  revenue_growth_pct: number | null;
+  pe_ratio: number | null;
+  next_earnings_date: string | null;
+  next_earnings_estimate_eps: number | null;
+  price: number | null;
+  market_cap: number | null;
+  week_52_high: number | null;
+  week_52_low: number | null;
+  price_change_pct_1d: number | null;
+  volume: number | null;
+  name: string | null;
+  rsi_weekly: number | null;
+  fetched_at: string;
+}
+
+interface UniverseRow {
+  symbol: string;
+  name: string;
+  exchange: string;
+  asset_class: string;
+  market_cap: number;
+  price: number;
+  volume_avg_30d: number;
+  sector: string | null;
+  industry: string | null;
+  revenue_growth_pct: number | null;
+  eps_next_positive: boolean | null;
+  synced_at: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS });
@@ -54,6 +95,7 @@ Deno.serve(async (req: Request) => {
 
   const supabase = createClient(supabaseUrl, supabaseSvc);
 
+  // deno-lint-ignore no-explicit-any
   let body: { criteria: any };
   try {
     body = await req.json();
@@ -65,7 +107,8 @@ Deno.serve(async (req: Request) => {
   if (!criteria) return errJson("criteria is required");
 
   // ── Step A: Query screener_universe ─────────────────────────────────────────
-  let query = supabase.from("screener_universe").select("*");
+  // deno-lint-ignore no-explicit-any
+  let query: any = supabase.from("screener_universe").select("*");
 
   if (criteria.symbol_query) {
     query = query.or(
@@ -80,10 +123,20 @@ Deno.serve(async (req: Request) => {
   if (criteria.asset_class && criteria.asset_class !== "both") {
     query = query.eq("asset_class", criteria.asset_class);
   }
+  if (criteria.revenue_growth_min_pct)
+    query = query.gte("revenue_growth_pct", criteria.revenue_growth_min_pct);
+  if (criteria.eps_next_positive) query = query.eq("eps_next_positive", true);
 
   const { data: universe, error: universeError } = await query.limit(200);
   if (universeError)
     return errJson(`Universe query error: ${universeError.message}`, 500);
+
+  console.log(
+    "[A] Universe count:",
+    universe?.length ?? 0,
+    "| criteria:",
+    JSON.stringify(criteria),
+  );
 
   if (!universe || universe.length === 0) {
     return okJson({
@@ -95,31 +148,32 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const totalEvaluated = universe.length;
-  const symbols = universe.map((u) => u.symbol);
-  console.log(
-    `[SCREENER] Universe: ${universe.length} | Symbols: ${symbols.slice(0, 5).join(",")}`,
-  );
+  const totalEvaluated = (universe as UniverseRow[]).length;
+  const symbols = (universe as UniverseRow[]).map((u) => u.symbol);
+
   // ── Step B: Fundamentals cache ──────────────────────────────────────────────
   const { data: cachedFunds } = await supabase
     .from("fundamentals_cache")
     .select("*")
     .in("symbol", symbols);
 
-  const cacheMap = new Map(cachedFunds?.map((f) => [f.symbol, f]) || []);
+  const cacheMap = new Map<string, FundamentalsRow>(
+    (cachedFunds as FundamentalsRow[] | null)?.map((f) => [f.symbol, f]) || [],
+  );
   const now = new Date();
   const TTL = 24 * 60 * 60 * 1000;
 
-  const missingSymbols = symbols.filter((sym) => {
+  const missingSymbols = symbols.filter((sym: string) => {
     const cached = cacheMap.get(sym);
     if (!cached) return true;
+    if (cached.week_52_high == null) return true; // force refresh if 52w data missing
     return now.getTime() - new Date(cached.fetched_at).getTime() > TTL;
   });
 
   if (missingSymbols.length > 0 && fmpKey) {
-    const toFetch = missingSymbols.slice(0, 10);
+    const toFetch = missingSymbols.slice(0, 15);
     await Promise.all(
-      toFetch.map(async (sym) => {
+      toFetch.map(async (sym: string) => {
         try {
           const res = await fetch(
             `${supabaseUrl}/functions/v1/fmp-proxy/fundamentals/${sym}`,
@@ -129,7 +183,7 @@ Deno.serve(async (req: Request) => {
           );
           if (res.ok) {
             const { data } = await res.json();
-            if (data) cacheMap.set(sym, data);
+            if (data) cacheMap.set(sym, data as FundamentalsRow);
           }
         } catch (e) {
           console.error(`Error fetching fundamentals for ${sym}:`, e);
@@ -138,16 +192,14 @@ Deno.serve(async (req: Request) => {
     );
   }
   console.log(
-    `[SCREENER] Cache hits: ${cacheMap.size} | Missing: ${missingSymbols.length}`,
+    "[B] Cache hits:",
+    cacheMap.size,
+    "| Missing:",
+    missingSymbols.length,
   );
+
   // ── Step C: Limitar candidatos para Claude ──────────────────────────────────
-  // Priorizar por revenue_growth_pct descendente, máximo 10 para evitar timeout
-  const candidates = universe
-    .filter((u) => {
-      const funds = cacheMap.get(u.symbol);
-      const growth = funds?.revenue_growth_pct ?? u.revenue_growth_pct ?? 0;
-      return growth > 0;
-    })
+  const candidates = (universe as UniverseRow[])
     .sort((a, b) => {
       const aGrowth =
         cacheMap.get(a.symbol)?.revenue_growth_pct ?? a.revenue_growth_pct ?? 0;
@@ -155,8 +207,14 @@ Deno.serve(async (req: Request) => {
         cacheMap.get(b.symbol)?.revenue_growth_pct ?? b.revenue_growth_pct ?? 0;
       return bGrowth - aGrowth;
     })
-    .slice(0, 10);
-  console.log(`[SCREENER] Candidates after filter: ${candidates.length}`);
+    .slice(0, 15);
+  console.log(
+    "[C] Candidates:",
+    candidates.length,
+    "| symbols:",
+    candidates.map((c) => c.symbol).join(","),
+  );
+
   // ── Step D: Portfolio context ───────────────────────────────────────────────
   const { data: positions } = await supabase
     .from("positions")
@@ -164,23 +222,31 @@ Deno.serve(async (req: Request) => {
     .eq("user_id", user.id);
 
   const portfolioInfo =
-    positions?.map((p) => ({
-      symbol: p.symbol,
-      portfolio_weight_pct: p.portfolio_weight_pct,
-    })) || [];
+    positions?.map(
+      (p: { symbol: string; portfolio_weight_pct: number | null }) => ({
+        symbol: p.symbol,
+        portfolio_weight_pct: p.portfolio_weight_pct,
+      }),
+    ) || [];
 
   // ── Step E: Claude scoring ──────────────────────────────────────────────────
   const anthropic = new Anthropic({ apiKey: anthropicKey });
 
-  const candidateData = candidates.map((c) => {
+  const candidateData = candidates.map((c: UniverseRow) => {
     const f = cacheMap.get(c.symbol);
+    const price = f?.price ?? c.price;
+    const w52h = f?.week_52_high ?? null;
+    const athDistancePct =
+      w52h != null && price != null && w52h > 0
+        ? ((price - w52h) / w52h) * 100
+        : null;
     return {
       symbol: c.symbol,
       name: c.name,
-      price: f?.price ?? c.price,
+      price,
       market_cap: f?.market_cap ?? c.market_cap,
       revenue_growth_pct: f?.revenue_growth_pct ?? c.revenue_growth_pct,
-      ath_distance_pct: f?.ath_distance_pct ?? null,
+      ath_distance_pct: athDistancePct,
       rsi_weekly: f?.rsi_weekly ?? null,
       eps_next_estimate: f?.eps_next_estimate ?? null,
       next_earnings_date: f?.next_earnings_date ?? null,
@@ -198,14 +264,16 @@ Luego un resumen ejecutivo de máximo 3 oraciones sobre los mejores resultados c
 Respondé SOLO en JSON con este formato exacto (sin markdown, sin backticks):
 {"summary":"...","items":[{"symbol":"...","score":85,"ai_note":"..."}]}`;
 
+  console.log("[E] Sending to Claude:", candidateData.length, "candidates");
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-5",
-    max_tokens: 1500,
+    max_tokens: 2500,
     system:
       "Eres un analista de inversiones experto. Respondes SOLO en formato JSON válido, sin markdown.",
     messages: [{ role: "user", content: prompt }],
   });
 
+  // deno-lint-ignore no-explicit-any
   let aiResult: { summary: string; items: any[] };
   try {
     const content = response.content[0]?.text ?? "";
@@ -217,9 +285,12 @@ Respondé SOLO en JSON con este formato exacto (sin markdown, sin backticks):
   }
 
   // ── Step F: Combine & Save ──────────────────────────────────────────────────
-  const portfolioSymbols = new Set(positions?.map((p) => p.symbol) || []);
+  const portfolioSymbols = new Set(
+    positions?.map((p: { symbol: string }) => p.symbol) || [],
+  );
 
-  const finalItems = aiResult.items.map((item) => {
+  // deno-lint-ignore no-explicit-any
+  const finalItems = aiResult.items.map((item: any) => {
     const candidate = candidateData.find((c) => c.symbol === item.symbol);
     return {
       ...candidate,

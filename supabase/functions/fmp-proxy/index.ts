@@ -215,7 +215,11 @@ async function getFundamentals(
     fetched_at: new Date().toISOString(),
   };
 
-  await supabase.from("fundamentals_cache").upsert({
+  console.log(
+    `[FMP] ${symbol} yearHigh=${quote.yearHigh} yearLow=${quote.yearLow}`,
+  );
+
+  const { error: upsertErr } = await supabase.from("fundamentals_cache").upsert({
     symbol,
     eps_current: payload.eps_current,
     eps_next_estimate: payload.eps_next_estimate,
@@ -233,6 +237,16 @@ async function getFundamentals(
     name: payload.name,
     fetched_at: new Date().toISOString(),
   });
+  if (upsertErr) {
+    console.error(
+      `[FMP] Upsert error for ${symbol}:`,
+      JSON.stringify(upsertErr),
+    );
+  } else {
+    console.log(
+      `[FMP] Upsert OK for ${symbol} — week_52_high=${payload.week_52_high}`,
+    );
+  }
 
   return json({ source: "fmp", data: payload });
 }
@@ -326,6 +340,19 @@ async function fetchYahooFinance(
             ? ((epsNextVal - epsCurr) / Math.abs(epsCurr)) * 100
             : null;
 
+        const w52h =
+          summary.fiftyTwoWeekHigh?.raw ??
+          stats.fiftyTwoWeekHigh?.raw ??
+          null;
+        const w52l =
+          summary.fiftyTwoWeekLow?.raw ??
+          stats.fiftyTwoWeekLow?.raw ??
+          null;
+
+        console.log(
+          `[Yahoo] ${symbol} 52w: high=${w52h} low=${w52l} | summaryDetail.fiftyTwoWeekHigh?.raw=${summary.fiftyTwoWeekHigh?.raw} | defaultKeyStatistics.fiftyTwoWeekHigh?.raw=${stats.fiftyTwoWeekHigh?.raw}`,
+        );
+
         payload = {
           symbol,
           eps_current: epsCurr,
@@ -337,8 +364,8 @@ async function fetchYahooFinance(
           next_earnings_estimate_eps: epsNextVal,
           price: fin.currentPrice?.raw ?? summary.previousClose?.raw ?? null,
           market_cap: summary.marketCap?.raw ?? null,
-          week_52_high: summary.fiftyTwoWeekHigh?.raw ?? null,
-          week_52_low: summary.fiftyTwoWeekLow?.raw ?? null,
+          week_52_high: w52h,
+          week_52_low: w52l,
           price_change_pct_1d: null,
           volume: summary.volume?.raw ?? null,
           name: qType.longName ?? qType.shortName ?? symbol,
@@ -370,24 +397,36 @@ async function fetchYahooFinance(
 
   // 4. Upsert cache
   if (payload) {
-    await supabase.from("fundamentals_cache").upsert({
-      symbol,
-      eps_current: payload.eps_current,
-      eps_next_estimate: payload.eps_next_estimate,
-      eps_growth_next_pct: payload.eps_growth_next_pct,
-      revenue_growth_pct: payload.revenue_growth_pct,
-      pe_ratio: payload.pe_ratio,
-      next_earnings_date: payload.next_earnings_date,
-      next_earnings_estimate_eps: payload.next_earnings_estimate_eps,
-      price: payload.price,
-      market_cap: payload.market_cap,
-      week_52_high: payload.week_52_high,
-      week_52_low: payload.week_52_low,
-      price_change_pct_1d: payload.price_change_pct_1d,
-      volume: payload.volume,
-      name: payload.name,
-      fetched_at: new Date().toISOString(),
-    });
+    const { error: upsertErr } = await supabase
+      .from("fundamentals_cache")
+      .upsert({
+        symbol,
+        eps_current: payload.eps_current,
+        eps_next_estimate: payload.eps_next_estimate,
+        eps_growth_next_pct: payload.eps_growth_next_pct,
+        revenue_growth_pct: payload.revenue_growth_pct,
+        pe_ratio: payload.pe_ratio,
+        next_earnings_date: payload.next_earnings_date,
+        next_earnings_estimate_eps: payload.next_earnings_estimate_eps,
+        price: payload.price,
+        market_cap: payload.market_cap,
+        week_52_high: payload.week_52_high,
+        week_52_low: payload.week_52_low,
+        price_change_pct_1d: payload.price_change_pct_1d,
+        volume: payload.volume,
+        name: payload.name,
+        fetched_at: new Date().toISOString(),
+      });
+    if (upsertErr) {
+      console.error(
+        `[Yahoo] Upsert error for ${symbol}:`,
+        JSON.stringify(upsertErr),
+      );
+    } else {
+      console.log(
+        `[Yahoo] Upsert OK for ${symbol} — week_52_high=${payload.week_52_high}`,
+      );
+    }
   }
 
   return json({ source: "yahoo", data: payload });
@@ -460,10 +499,19 @@ async function fetchAlphaVantage(
     fetched_at: new Date().toISOString(),
   };
 
-  await supabase.from("fundamentals_cache").upsert({
-    symbol,
-    ...payload,
-  });
+  const { error: upsertErr } = await supabase
+    .from("fundamentals_cache")
+    .upsert(payload);
+  if (upsertErr) {
+    console.error(
+      `[AV] Upsert error for ${symbol}:`,
+      JSON.stringify(upsertErr),
+    );
+  } else {
+    console.log(
+      `[AV] Upsert OK for ${symbol} — week_52_high=${payload.week_52_high}`,
+    );
+  }
 
   return json({ source: "alpha_vantage", data: payload });
 }
