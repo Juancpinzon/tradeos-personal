@@ -79,7 +79,6 @@ Deno.serve(async (req: Request) => {
   const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabaseSvc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-  const fmpKey = Deno.env.get("FMP_API_KEY");
 
   if (!anthropicKey) return errJson("ANTHROPIC_API_KEY not configured", 500);
 
@@ -151,7 +150,7 @@ Deno.serve(async (req: Request) => {
   const totalEvaluated = (universe as UniverseRow[]).length;
   const symbols = (universe as UniverseRow[]).map((u) => u.symbol);
 
-  // ── Step B: Fundamentals cache ──────────────────────────────────────────────
+  // ── Step B: Fundamentals cache (read-only — screener-universe-sync popula esto) ──
   const { data: cachedFunds } = await supabase
     .from("fundamentals_cache")
     .select("*")
@@ -160,42 +159,38 @@ Deno.serve(async (req: Request) => {
   const cacheMap = new Map<string, FundamentalsRow>(
     (cachedFunds as FundamentalsRow[] | null)?.map((f) => [f.symbol, f]) || [],
   );
-  const now = new Date();
-  const TTL = 24 * 60 * 60 * 1000;
 
-  const missingSymbols = symbols.filter((sym: string) => {
+  // Fetch fundamentals for symbols missing week_52_high (sequential, 500ms delay)
+  const toFetch = symbols.filter((sym: string) => {
     const cached = cacheMap.get(sym);
     if (!cached) return true;
-    if (cached.week_52_high == null) return true; // force refresh if 52w data missing
-    return now.getTime() - new Date(cached.fetched_at).getTime() > TTL;
+    if (!cached.week_52_high) return true;
+    return false;
   });
 
-  if (missingSymbols.length > 0 && fmpKey) {
-    const toFetch = missingSymbols.slice(0, 15);
-    await Promise.all(
-      toFetch.map(async (sym: string) => {
-        try {
-          const res = await fetch(
-            `${supabaseUrl}/functions/v1/fmp-proxy/fundamentals/${sym}`,
-            {
-              headers: { Authorization: authHeader },
-            },
-          );
-          if (res.ok) {
-            const { data } = await res.json();
-            if (data) cacheMap.set(sym, data as FundamentalsRow);
-          }
-        } catch (e) {
-          console.error(`Error fetching fundamentals for ${sym}:`, e);
-        }
-      }),
-    );
+  for (const sym of toFetch.slice(0, 5)) {
+    try {
+      const res = await fetch(
+        `${supabaseUrl}/functions/v1/fmp-proxy/fundamentals/${sym}`,
+        { headers: { Authorization: authHeader } },
+      );
+      if (res.ok) {
+        const { data } = await res.json();
+        if (data) cacheMap.set(sym, data as FundamentalsRow);
+      }
+    } catch (e) {
+      console.error(`[B] Error fetching fundamentals for ${sym}:`, e);
+    }
+    await new Promise((r) => setTimeout(r, 200));
   }
+
   console.log(
     "[B] Cache hits:",
     cacheMap.size,
-    "| Missing:",
-    missingSymbols.length,
+    "| fetched:",
+    Math.min(toFetch.length, 15),
+    "| still missing:",
+    Math.max(toFetch.length - 15, 0),
   );
 
   // ── Step C: Limitar candidatos para Claude ──────────────────────────────────

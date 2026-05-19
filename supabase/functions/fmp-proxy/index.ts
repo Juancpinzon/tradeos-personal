@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // supabase/functions/fmp-proxy/index.ts
-// Fix: routing usa .split("/fmp-proxy").pop() para ser robusto en producción
-// Fix: fallback chain FMP → Yahoo → null (nunca retorna 404/502 al cliente)
+// Fallback chain: FMP (detecta 403) → Alpha Vantage → Yahoo → null
+// AV es fuente primaria cuando FMP retorna 403 (Legacy Endpoint en plan free)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -81,8 +81,9 @@ Deno.serve(async (req: Request) => {
     if (endpoint[0] === "fundamentals" && endpoint[1]) {
       const symbol = endpoint[1].toUpperCase();
       if (!fmpKey) {
-        // Sin FMP key, ir directo a Yahoo
-        return await fetchYahooFinance(symbol, supabase, avKey ?? null);
+        // Sin FMP key: AV primero, Yahoo como fallback
+        if (avKey) return await fetchAlphaVantage(symbol, supabase, avKey);
+        return await fetchYahooFinance(symbol, supabase, null);
       }
       return await getFundamentals(symbol, supabase, fmpKey, avKey ?? null);
     }
@@ -113,7 +114,9 @@ Deno.serve(async (req: Request) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// getFundamentals — FMP con cache de 24h, fallback automático a Yahoo
+// getFundamentals — FMP con cache de 24h
+// Si FMP retorna 403 (Legacy Endpoint), deriva a AV → Yahoo
+// Endpoints free: /quote (price+52w), /key-metrics (EPS, PE), /analyst-estimates
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function getFundamentals(
@@ -137,87 +140,79 @@ async function getFundamentals(
     }
   }
 
-  // 2. FMP
-  const [quoteRes, incomeRes, estimatesRes] = await Promise.all([
-    fetch(`${FMP_BASE}/quote/${symbol}?apikey=${fmpKey}`),
-    fetch(`${FMP_BASE}/income-statement/${symbol}?limit=2&apikey=${fmpKey}`),
+  // 2. FMP /quote — detectar 403 antes de continuar
+  const quoteRes = await fetch(`${FMP_BASE}/quote/${symbol}?apikey=${fmpKey}`);
+  console.log(`[FMP] ${symbol} quote status: ${quoteRes.status}`);
+
+  if (quoteRes.status === 403) {
+    console.warn(`[FMP] 403 Legacy Endpoint para ${symbol} — derivando a AV`);
+    if (avKey) return await fetchAlphaVantage(symbol, supabase, avKey);
+    return await fetchYahooFinance(symbol, supabase, null);
+  }
+
+  const quoteRaw = await quoteRes.text();
+  console.log(`[FMP] ${symbol} quote body (300): ${quoteRaw.substring(0, 300)}`);
+
+  // 3. FMP /key-metrics y /analyst-estimates (en paralelo, solo si quote OK)
+  const [metricsRes, estimatesRes] = await Promise.all([
+    fetch(`${FMP_BASE}/key-metrics/${symbol}?limit=1&apikey=${fmpKey}`),
     fetch(`${FMP_BASE}/analyst-estimates/${symbol}?limit=1&apikey=${fmpKey}`),
   ]);
-
-  const [quoteRaw, incomeRaw, estimatesRaw] = await Promise.all([
-    quoteRes.text(),
-    incomeRes.text(),
+  const [metricsRaw, estimatesRaw] = await Promise.all([
+    metricsRes.text(),
     estimatesRes.text(),
   ]);
 
-  console.log(
-    `[FMP] ${symbol} statuses: quote=${quoteRes.status}, income=${incomeRes.status}`,
-  );
-  console.log(
-    `[FMP] ${symbol} quote body (300): ${quoteRaw.substring(0, 300)}`,
-  );
-
-  let quoteData, incomeData, estimatesData;
+  let quoteData, metricsData, estimatesData;
   try {
     quoteData = JSON.parse(quoteRaw);
-    incomeData = JSON.parse(incomeRaw);
+    metricsData = JSON.parse(metricsRaw);
     estimatesData = JSON.parse(estimatesRaw);
   } catch (e) {
     console.error(`[FMP] JSON parse error for ${symbol}:`, e);
-    // Fallback a Yahoo si FMP devuelve HTML o JSON inválido
-    return await fetchYahooFinance(symbol, supabase, avKey);
+    if (avKey) return await fetchAlphaVantage(symbol, supabase, avKey);
+    return await fetchYahooFinance(symbol, supabase, null);
   }
 
   const quote = Array.isArray(quoteData) ? quoteData[0] : null;
-  const thisYear = Array.isArray(incomeData) ? incomeData[0] : null;
-  const lastYear = Array.isArray(incomeData) ? incomeData[1] : null;
+  const metrics = Array.isArray(metricsData) ? metricsData[0] : null;
   const estimates = Array.isArray(estimatesData) ? estimatesData[0] : null;
 
   if (!quote) {
-    console.warn(
-      `[FMP] No quote for ${symbol} — falling back to Yahoo Finance`,
-    );
-    // Fallback automático: Yahoo → AV → null (nunca 404)
-    return await fetchYahooFinance(symbol, supabase, avKey);
+    console.warn(`[FMP] No quote para ${symbol} — derivando a AV`);
+    if (avKey) return await fetchAlphaVantage(symbol, supabase, avKey);
+    return await fetchYahooFinance(symbol, supabase, null);
   }
 
-  const revenueGrowthPct =
-    thisYear && lastYear && lastYear.revenue > 0
-      ? ((thisYear.revenue - lastYear.revenue) / Math.abs(lastYear.revenue)) *
-        100
-      : null;
-
   const epsNext = estimates?.estimatedEpsAvg ?? null;
-  const epsCurr = quote.eps ?? null;
+  const epsCurr = quote.eps ?? metrics?.eps ?? null;
   const epsGrowthPct =
     epsNext && epsCurr && epsCurr !== 0
       ? ((epsNext - epsCurr) / Math.abs(epsCurr)) * 100
       : null;
+
+  console.log(`[FMP] ${symbol} yearHigh=${quote.yearHigh} yearLow=${quote.yearLow}`);
 
   const payload = {
     symbol,
     eps_current: epsCurr,
     eps_next_estimate: epsNext,
     eps_growth_next_pct: epsGrowthPct,
-    revenue_growth_pct: revenueGrowthPct,
-    pe_ratio: quote.pe ?? null,
+    revenue_growth_pct: metrics?.revenueGrowth != null ? metrics.revenueGrowth * 100 : null,
+    pe_ratio: quote.pe ?? metrics?.peRatio ?? null,
     next_earnings_date: quote.earningsAnnouncement
       ? quote.earningsAnnouncement.split("T")[0]
       : null,
     next_earnings_estimate_eps: epsNext,
-    price: quote.price,
-    market_cap: quote.marketCap,
-    week_52_high: quote.yearHigh,
-    week_52_low: quote.yearLow,
-    price_change_pct_1d: quote.changesPercentage,
-    volume: quote.volume,
-    name: quote.name,
+    price: quote.price ?? null,
+    market_cap: quote.marketCap ?? null,
+    week_52_high: quote.yearHigh ?? null,
+    week_52_low: quote.yearLow ?? null,
+    price_change_pct_1d: quote.changesPercentage ?? null,
+    volume: quote.volume ?? null,
+    name: quote.name ?? symbol,
     fetched_at: new Date().toISOString(),
   };
-
-  console.log(
-    `[FMP] ${symbol} yearHigh=${quote.yearHigh} yearLow=${quote.yearLow}`,
-  );
 
   const { error: upsertErr } = await supabase.from("fundamentals_cache").upsert({
     symbol,
@@ -238,14 +233,9 @@ async function getFundamentals(
     fetched_at: new Date().toISOString(),
   });
   if (upsertErr) {
-    console.error(
-      `[FMP] Upsert error for ${symbol}:`,
-      JSON.stringify(upsertErr),
-    );
+    console.error(`[FMP] Upsert error para ${symbol}:`, JSON.stringify(upsertErr));
   } else {
-    console.log(
-      `[FMP] Upsert OK for ${symbol} — week_52_high=${payload.week_52_high}`,
-    );
+    console.log(`[FMP] Upsert OK para ${symbol} — week_52_high=${payload.week_52_high}`);
   }
 
   return json({ source: "fmp", data: payload });
@@ -362,7 +352,7 @@ async function fetchYahooFinance(
           pe_ratio: peRatio,
           next_earnings_date: earningsDate,
           next_earnings_estimate_eps: epsNextVal,
-          price: fin.currentPrice?.raw ?? summary.previousClose?.raw ?? null,
+          price: fin.currentPrice?.raw ?? summary.previousClose?.raw ?? summary.regularMarketPrice?.raw ?? null,
           market_cap: summary.marketCap?.raw ?? null,
           week_52_high: w52h,
           week_52_low: w52l,
@@ -395,28 +385,30 @@ async function fetchYahooFinance(
     return json({ source: "yahoo", data: null }, 200);
   }
 
-  // 4. Upsert cache
+  // 4. Upsert cache — never overwrite week_52_high/low with null
   if (payload) {
+    const baseRow: Record<string, unknown> = {
+      symbol,
+      eps_current: payload.eps_current,
+      eps_next_estimate: payload.eps_next_estimate,
+      eps_growth_next_pct: payload.eps_growth_next_pct,
+      revenue_growth_pct: payload.revenue_growth_pct,
+      pe_ratio: payload.pe_ratio,
+      next_earnings_date: payload.next_earnings_date,
+      next_earnings_estimate_eps: payload.next_earnings_estimate_eps,
+      price: payload.price,
+      market_cap: payload.market_cap,
+      price_change_pct_1d: payload.price_change_pct_1d,
+      volume: payload.volume,
+      name: payload.name,
+      fetched_at: new Date().toISOString(),
+    };
+    if (payload.week_52_high !== null) baseRow.week_52_high = payload.week_52_high;
+    if (payload.week_52_low !== null) baseRow.week_52_low = payload.week_52_low;
+
     const { error: upsertErr } = await supabase
       .from("fundamentals_cache")
-      .upsert({
-        symbol,
-        eps_current: payload.eps_current,
-        eps_next_estimate: payload.eps_next_estimate,
-        eps_growth_next_pct: payload.eps_growth_next_pct,
-        revenue_growth_pct: payload.revenue_growth_pct,
-        pe_ratio: payload.pe_ratio,
-        next_earnings_date: payload.next_earnings_date,
-        next_earnings_estimate_eps: payload.next_earnings_estimate_eps,
-        price: payload.price,
-        market_cap: payload.market_cap,
-        week_52_high: payload.week_52_high,
-        week_52_low: payload.week_52_low,
-        price_change_pct_1d: payload.price_change_pct_1d,
-        volume: payload.volume,
-        name: payload.name,
-        fetched_at: new Date().toISOString(),
-      });
+      .upsert(baseRow, { onConflict: "symbol" });
     if (upsertErr) {
       console.error(
         `[Yahoo] Upsert error for ${symbol}:`,
