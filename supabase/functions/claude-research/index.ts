@@ -250,7 +250,7 @@ Deno.serve(async (req: Request) => {
   const anthropic = new Anthropic({ apiKey: anthropicKey });
 
   const stream = await anthropic.messages.stream({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-5",
     max_tokens: 2000,
     system: systemPrompt,
     messages: [{ role: "user", content: `${dataCtx}\n\nPregunta: ${query}` }],
