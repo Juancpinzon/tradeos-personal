@@ -136,20 +136,22 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // ── Step C: Todos los candidatos pasan a Claude para scoring ────────────────
-  // Los filtros duros ya se aplicaron en Step A (market cap, precio, volumen)
-  // Claude hace el scoring considerando los fundamentales disponibles
-  const candidates = universe.slice(0, 20);
-
-  if (candidates.length === 0) {
-    return okJson({
-      summary:
-        "Ningún candidato superó los filtros. Considerá ampliar los criterios.",
-      results: [],
-      total_candidates_evaluated: totalEvaluated,
-      total_passed_filters: 0,
-    });
-  }
+  // ── Step C: Limitar candidatos para Claude ──────────────────────────────────
+  // Priorizar por revenue_growth_pct descendente, máximo 10 para evitar timeout
+  const candidates = universe
+    .filter((u) => {
+      const funds = cacheMap.get(u.symbol);
+      const growth = funds?.revenue_growth_pct ?? u.revenue_growth_pct ?? 0;
+      return growth > 0;
+    })
+    .sort((a, b) => {
+      const aGrowth =
+        cacheMap.get(a.symbol)?.revenue_growth_pct ?? a.revenue_growth_pct ?? 0;
+      const bGrowth =
+        cacheMap.get(b.symbol)?.revenue_growth_pct ?? b.revenue_growth_pct ?? 0;
+      return bGrowth - aGrowth;
+    })
+    .slice(0, 10);
 
   // ── Step D: Portfolio context ───────────────────────────────────────────────
   const { data: positions } = await supabase
