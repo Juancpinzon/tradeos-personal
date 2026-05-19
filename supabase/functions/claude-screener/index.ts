@@ -193,7 +193,7 @@ Respondé SOLO en JSON con este formato exacto (sin markdown, sin backticks):
 {"summary":"...","items":[{"symbol":"...","score":85,"ai_note":"..."}]}`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-5",
     max_tokens: 1500,
     system:
       "Eres un analista de inversiones experto. Respondes SOLO en formato JSON válido, sin markdown.",
