@@ -136,41 +136,10 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // ── Step C: Filter by fundamental criteria ──────────────────────────────────
-  // Si no hay fundamentales en cache, usamos los datos del universo directamente
-  const candidates = universe
-    .filter((u) => {
-      const funds = cacheMap.get(u.symbol);
-
-      if (criteria.revenue_growth_min_pct != null) {
-        const growth =
-          funds?.revenue_growth_pct ?? u.revenue_growth_pct ?? null;
-        if (growth === null || growth < criteria.revenue_growth_min_pct)
-          return false;
-      }
-      if (criteria.eps_next_positive) {
-        const eps = funds?.eps_next_estimate ?? null;
-        // Si no hay dato de EPS, usar el campo del universo
-        const epsPos = u.eps_next_positive ?? (eps != null ? eps > 0 : null);
-        if (epsPos === false) return false;
-      }
-      if (criteria.ath_distance_max_pct != null) {
-        const athDist = funds?.ath_distance_pct ?? u.ath_distance_pct ?? null;
-        if (athDist !== null && athDist < criteria.ath_distance_max_pct)
-          return false;
-      }
-      if (criteria.rsi_weekly_min != null || criteria.rsi_weekly_max != null) {
-        const rsi = funds?.rsi_weekly ?? u.rsi_weekly ?? null;
-        if (rsi === null) return true; // Sin RSI: no filtrar
-        if (criteria.rsi_weekly_min != null && rsi < criteria.rsi_weekly_min)
-          return false;
-        if (criteria.rsi_weekly_max != null && rsi > criteria.rsi_weekly_max)
-          return false;
-      }
-
-      return true;
-    })
-    .slice(0, 20);
+  // ── Step C: Todos los candidatos pasan a Claude para scoring ────────────────
+  // Los filtros duros ya se aplicaron en Step A (market cap, precio, volumen)
+  // Claude hace el scoring considerando los fundamentales disponibles
+  const candidates = universe.slice(0, 20);
 
   if (candidates.length === 0) {
     return okJson({
