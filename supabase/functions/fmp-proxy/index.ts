@@ -10,6 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const FMP_BASE = "https://financialmodelingprep.com/api/v3";
 const AV_BASE = "https://www.alphavantage.co/query";
 const YAHOO_BASE = "https://query1.finance.yahoo.com/v10/finance/quoteSummary";
+const ALPACA_DATA = "https://data.alpaca.markets/v2";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const BROWSER_UA =
@@ -50,6 +51,8 @@ Deno.serve(async (req: Request) => {
   const supabaseSvc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const fmpKey = Deno.env.get("FMP_API_KEY");
   const avKey = Deno.env.get("ALPHA_VANTAGE_KEY");
+  const alpacaKey = Deno.env.get("ALPACA_API_KEY");
+  const alpacaSecret = Deno.env.get("ALPACA_SECRET_KEY");
 
   const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
     global: { headers: { Authorization: authHeader } },
@@ -95,6 +98,12 @@ Deno.serve(async (req: Request) => {
         url.searchParams.get("from") ?? new Date().toISOString().split("T")[0];
       const to = url.searchParams.get("to") ?? addDays(new Date(), 30);
       return await getEarningsCalendar(from, to, fmpKey);
+    }
+
+    // GET /market-data/{symbol} — Alpaca bars para 52w high/low + AV para fundamentales
+    if (endpoint[0] === "market-data" && endpoint[1]) {
+      const symbol = endpoint[1].toUpperCase();
+      return await getMarketData(symbol, supabase, alpacaKey ?? null, alpacaSecret ?? null, avKey ?? null, fmpKey ?? null);
     }
 
     // GET /finviz/{symbol}  (ahora usa Yahoo Finance internamente)
@@ -257,6 +266,194 @@ function addDays(date: Date, days: number): string {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
   return d.toISOString().split("T")[0];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getMarketData — Alpaca para price/52w/volume + AV/FMP para fundamentales
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function getMarketData(
+  symbol: string,
+  supabase: ReturnType<typeof createClient>,
+  alpacaKey: string | null,
+  alpacaSecret: string | null,
+  avKey: string | null,
+  fmpKey: string | null,
+) {
+  // 1. Cache
+  const { data: cached } = await supabase
+    .from("fundamentals_cache")
+    .select("*")
+    .eq("symbol", symbol)
+    .single();
+
+  if (cached) {
+    const age = Date.now() - new Date(cached.fetched_at).getTime();
+    if (age < CACHE_TTL_MS) {
+      console.log(`[MarketData] Cache hit for ${symbol}`);
+      return json({ source: "cache", data: cached });
+    }
+  }
+
+  // 2. Alpaca: 252 daily bars → week_52_high, week_52_low, price, volume
+  let w52h: number | null = null;
+  let w52l: number | null = null;
+  let currentPrice: number | null = null;
+  let currentVolume: number | null = null;
+
+  if (alpacaKey && alpacaSecret) {
+    try {
+      const barsUrl = `${ALPACA_DATA}/stocks/bars?symbols=${symbol}&timeframe=1Day&limit=252&adjustment=raw`;
+      const barsRes = await fetch(barsUrl, {
+        headers: {
+          "APCA-API-KEY-ID": alpacaKey,
+          "APCA-API-SECRET-KEY": alpacaSecret,
+        },
+      });
+      console.log(`[MarketData] Alpaca bars status for ${symbol}: ${barsRes.status}`);
+
+      if (barsRes.ok) {
+        const barsBody = await barsRes.json();
+        const bars: { h: number; l: number; c: number; v: number }[] =
+          barsBody.bars?.[symbol] ?? [];
+
+        if (bars.length > 0) {
+          w52h = Math.max(...bars.map((b) => b.h));
+          w52l = Math.min(...bars.map((b) => b.l));
+          currentPrice = bars[bars.length - 1].c;
+          currentVolume = bars[bars.length - 1].v;
+          console.log(
+            `[MarketData] Alpaca ${symbol}: price=${currentPrice} 52h=${w52h} 52l=${w52l} bars=${bars.length}`,
+          );
+        } else {
+          console.warn(`[MarketData] Alpaca returned 0 bars for ${symbol}`);
+        }
+      }
+    } catch (e) {
+      console.error(`[MarketData] Alpaca fetch error for ${symbol}:`, e);
+    }
+  }
+
+  // 3. Fundamentales: AV primero, luego FMP
+  let epsCurr: number | null = null;
+  let epsNext: number | null = null;
+  let epsGrowthPct: number | null = null;
+  let revenueGrowth: number | null = null;
+  let peRatio: number | null = null;
+  let nextEarningsDate: string | null = null;
+  let marketCap: number | null = null;
+  let name: string = symbol;
+
+  if (avKey) {
+    try {
+      const [overviewRes, quoteRes] = await Promise.all([
+        fetch(`${AV_BASE}?function=OVERVIEW&symbol=${symbol}&apikey=${avKey}`),
+        fetch(`${AV_BASE}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${avKey}`),
+      ]);
+      const [overviewBody, quoteBody] = await Promise.all([
+        overviewRes.text(),
+        quoteRes.text(),
+      ]);
+      const av = JSON.parse(overviewBody) as Record<string, string>;
+      const gqRaw = JSON.parse(quoteBody);
+      const gq: Record<string, string> = gqRaw["Global Quote"] ?? {};
+
+      if (av.Symbol && !av.Note && !av.Information) {
+        const n = (key: string) => {
+          const v = parseFloat(av[key] ?? "");
+          return isNaN(v) ? null : v;
+        };
+        epsCurr = n("EPS");
+        epsNext = n("ForwardEPS");
+        epsGrowthPct =
+          epsNext && epsCurr && epsCurr !== 0
+            ? ((epsNext - epsCurr) / Math.abs(epsCurr)) * 100
+            : null;
+        peRatio = n("PERatio");
+        marketCap = n("MarketCapitalization");
+        nextEarningsDate = av.NextEarningsDate ?? null;
+        name = av.Name ?? symbol;
+        // Use AV price/volume only as fallback if Alpaca gave nothing
+        if (currentPrice === null) {
+          currentPrice = parseFloat(gq["05. price"] ?? "") || null;
+        }
+        if (currentVolume === null) {
+          currentVolume = parseFloat(gq["06. volume"] ?? "") || null;
+        }
+        console.log(`[MarketData] AV ${symbol}: EPS=${epsCurr} PE=${peRatio}`);
+      } else {
+        console.warn(`[MarketData] AV rate-limited or empty for ${symbol}`);
+      }
+    } catch (e) {
+      console.error(`[MarketData] AV fetch error for ${symbol}:`, e);
+    }
+  } else if (fmpKey) {
+    try {
+      const [quoteRes, estimatesRes] = await Promise.all([
+        fetch(`${FMP_BASE}/quote/${symbol}?apikey=${fmpKey}`),
+        fetch(`${FMP_BASE}/analyst-estimates/${symbol}?limit=1&apikey=${fmpKey}`),
+      ]);
+      if (quoteRes.status !== 403) {
+        const [quoteData, estimatesData] = await Promise.all([
+          quoteRes.json(),
+          estimatesRes.json(),
+        ]);
+        const q = Array.isArray(quoteData) ? quoteData[0] : null;
+        const est = Array.isArray(estimatesData) ? estimatesData[0] : null;
+        if (q) {
+          epsCurr = q.eps ?? null;
+          epsNext = est?.estimatedEpsAvg ?? null;
+          epsGrowthPct =
+            epsNext && epsCurr && epsCurr !== 0
+              ? ((epsNext - epsCurr) / Math.abs(epsCurr)) * 100
+              : null;
+          peRatio = q.pe ?? null;
+          marketCap = q.marketCap ?? null;
+          nextEarningsDate = q.earningsAnnouncement?.split("T")[0] ?? null;
+          name = q.name ?? symbol;
+          if (currentPrice === null) currentPrice = q.price ?? null;
+          if (currentVolume === null) currentVolume = q.volume ?? null;
+        }
+      }
+    } catch (e) {
+      console.error(`[MarketData] FMP fetch error for ${symbol}:`, e);
+    }
+  }
+
+  const payload = {
+    symbol,
+    price: currentPrice,
+    week_52_high: w52h,
+    week_52_low: w52l,
+    volume: currentVolume,
+    market_cap: marketCap,
+    eps_current: epsCurr,
+    eps_next_estimate: epsNext,
+    eps_growth_next_pct: epsGrowthPct,
+    revenue_growth_pct: revenueGrowth,
+    pe_ratio: peRatio,
+    next_earnings_date: nextEarningsDate,
+    next_earnings_estimate_eps: epsNext,
+    price_change_pct_1d: null,
+    name,
+    fetched_at: new Date().toISOString(),
+  };
+
+  // 4. Upsert — never overwrite valid 52w data with null
+  const row: Record<string, unknown> = { ...payload };
+  if (payload.week_52_high === null) delete row.week_52_high;
+  if (payload.week_52_low === null) delete row.week_52_low;
+
+  const { error: upsertErr } = await supabase
+    .from("fundamentals_cache")
+    .upsert(row, { onConflict: "symbol" });
+  if (upsertErr) {
+    console.error(`[MarketData] Upsert error for ${symbol}:`, JSON.stringify(upsertErr));
+  } else {
+    console.log(`[MarketData] Upsert OK for ${symbol} — week_52_high=${payload.week_52_high}`);
+  }
+
+  return json({ source: "alpaca+fundamentals", data: payload });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

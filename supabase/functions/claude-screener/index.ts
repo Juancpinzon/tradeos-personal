@@ -171,7 +171,7 @@ Deno.serve(async (req: Request) => {
   for (const sym of toFetch.slice(0, 5)) {
     try {
       const res = await fetch(
-        `${supabaseUrl}/functions/v1/fmp-proxy/fundamentals/${sym}`,
+        `${supabaseUrl}/functions/v1/fmp-proxy/market-data/${sym}`,
         { headers: { Authorization: authHeader } },
       );
       if (res.ok) {
