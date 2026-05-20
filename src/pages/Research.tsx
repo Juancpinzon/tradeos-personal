@@ -3,32 +3,36 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { ResearchPanel } from '../components/research/ResearchPanel'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
 export default function Research() {
+  const isMobile = useMediaQuery('(max-width: 767px)')
+
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100%',
-        overflow: 'hidden',
+        ...(isMobile ? { minHeight: '100%' } : { height: '100%', overflow: 'hidden' }),
       }}
     >
       {/* Header */}
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
-          padding: '20px 24px 16px',
+          gap: '12px',
+          padding: isMobile ? '14px 16px 12px' : '20px 24px 16px',
           borderBottom: '1px solid var(--border-default)',
           flexShrink: 0,
+          flexWrap: 'wrap',
         }}
       >
         <div>
           <h1
             style={{
-              fontSize: '18px',
+              fontSize: isMobile ? '15px' : '18px',
               fontWeight: 700,
               fontFamily: 'Syne, system-ui, sans-serif',
               color: 'var(--text-primary)',
@@ -61,6 +65,7 @@ export default function Research() {
             color: 'rgba(99,160,255,0.9)',
             fontFamily: 'Syne, system-ui, sans-serif',
             letterSpacing: '0.04em',
+            flexShrink: 0,
           }}
         >
           claude-sonnet-4-20250514
@@ -71,10 +76,11 @@ export default function Research() {
       <div
         style={{
           flex: 1,
-          padding: '16px 24px 20px',
-          overflow: 'hidden',
+          padding: isMobile ? '12px 16px 16px' : '16px 24px 20px',
+          overflow: isMobile ? 'visible' : 'hidden',
           display: 'flex',
           flexDirection: 'column',
+          minWidth: 0,
         }}
       >
         <ResearchPanel />

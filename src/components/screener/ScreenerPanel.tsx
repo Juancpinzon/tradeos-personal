@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { ScreenerCriteriaForm } from "./ScreenerCriteriaForm";
 import { ScreenerResultsTable } from "./ScreenerResultsTable";
 import { useScreener } from "../../hooks/useScreener";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { Layers, Zap } from "lucide-react";
 
 export function ScreenerPanel() {
@@ -14,6 +15,7 @@ export function ScreenerPanel() {
     activePresetId,
     savePreset,
   } = useScreener();
+  const isMobile = useMediaQuery("(max-width: 767px)");
 
   useEffect(() => {
     const fetchAndSeed = async () => {
@@ -56,7 +58,13 @@ export function ScreenerPanel() {
 
   return (
     <div
-      style={{
+      style={isMobile ? {
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        minHeight: "100%",
+        background: "var(--bg-base)",
+      } : {
         display: "flex",
         height: "100%",
         width: "100%",
@@ -64,12 +72,16 @@ export function ScreenerPanel() {
         overflow: "hidden",
       }}
     >
-      {/* Sidebar de Criterios */}
+      {/* Criterios — full width on mobile, fixed sidebar on desktop */}
       <ScreenerCriteriaForm />
 
-      {/* Área Principal de Resultados */}
+      {/* Resultados */}
       <div
-        style={{
+        style={isMobile ? {
+          display: "flex",
+          flexDirection: "column",
+          width: "100%",
+        } : {
           flex: 1,
           display: "flex",
           flexDirection: "column",
@@ -148,7 +160,10 @@ export function ScreenerPanel() {
 
         {/* Contenido de Resultados */}
         <div
-          style={{
+          style={isMobile ? {
+            display: "flex",
+            flexDirection: "column",
+          } : {
             flex: 1,
             overflow: "hidden",
             display: "flex",

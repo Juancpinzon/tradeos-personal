@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useScreenerStore } from '../../stores/screenerStore';
 import { useScreener } from '../../hooks/useScreener';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { Search, Save, Play } from 'lucide-react';
 
 export function ScreenerCriteriaForm() {
@@ -8,6 +9,7 @@ export function ScreenerCriteriaForm() {
   const { runScreener, savePreset } = useScreener();
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [presetName, setPresetName] = useState('');
+  const isMobile = useMediaQuery('(max-width: 767px)');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
@@ -33,7 +35,13 @@ export function ScreenerCriteriaForm() {
   };
 
   return (
-    <div style={{
+    <div style={isMobile ? {
+      width: '100%',
+      borderBottom: '1px solid var(--border-default)',
+      background: 'var(--bg-surface)',
+      display: 'flex',
+      flexDirection: 'column',
+    } : {
       width: '420px',
       flexShrink: 0,
       borderRight: '1px solid var(--border-default)',
@@ -105,12 +113,11 @@ export function ScreenerCriteriaForm() {
       </div>
 
       <div style={{
-        flex: 1,
-        overflowY: 'auto',
+        ...(isMobile ? {} : { flex: 1, overflowY: 'auto' }),
         padding: '16px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px'
+        gap: '20px',
       }}>
         {/* Búsqueda por Símbolo / Nombre Split */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

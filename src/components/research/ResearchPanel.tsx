@@ -15,6 +15,7 @@ import { TradingViewWidget } from "./TradingViewWidget";
 import { PortfolioContextPanel } from "./PortfolioContextPanel";
 import { useResearch } from "../../hooks/useResearch";
 import { useSymbolSearch } from "../../hooks/useSymbolSearch";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import type { ResearchEntry } from "../../types";
 import { formatDate } from "../../lib/formatters";
 import { RotateCcw, ExternalLink, Copy, Download, Trash2 } from "lucide-react";
@@ -413,6 +414,7 @@ export function ResearchPanel() {
   const [queryInput, setQueryInput] = useState("");
   const analysisRef = useRef<HTMLDivElement>(null);
   const symbolRef = useRef<HTMLInputElement>(null);
+  const isMobile = useMediaQuery("(max-width: 767px)");
 
   const dropdownStyle: React.CSSProperties = {
     position: "absolute",
@@ -529,7 +531,7 @@ export function ResearchPanel() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "120px 240px 1fr",
+            gridTemplateColumns: isMobile ? "1fr 1fr" : "120px 240px 1fr",
             gap: "10px",
             width: "100%",
           }}
@@ -662,7 +664,7 @@ export function ResearchPanel() {
           </div>
 
           {/* Query */}
-          <div>
+          <div style={isMobile ? { gridColumn: "span 2" } : undefined}>
             <label
               style={{
                 fontSize: "9px",
@@ -895,10 +897,14 @@ export function ResearchPanel() {
         </div>
       )}
 
-      {/* ── Layout dos columnas ────────────────────────────────────────────── */}
+      {/* ── Layout: dos columnas en desktop, columna única en mobile ─────── */}
       {hasResult || isLoading ? (
         <div
-          style={{
+          style={isMobile ? {
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+          } : {
             display: "flex",
             gap: "16px",
             flex: 1,
@@ -906,10 +912,10 @@ export function ResearchPanel() {
             overflow: "hidden",
           }}
         >
-          {/* Columna izquierda — análisis streaming (70%) */}
+          {/* Análisis streaming */}
           <div
             ref={analysisRef}
-            style={{
+            style={isMobile ? undefined : {
               flex: "0 0 70%",
               overflowY: "auto",
               paddingRight: "4px",
@@ -920,7 +926,7 @@ export function ResearchPanel() {
                 background: "var(--bg-surface)",
                 border: "1px solid var(--border-default)",
                 borderRadius: "8px",
-                padding: "20px 24px",
+                padding: isMobile ? "16px" : "20px 24px",
                 minHeight: "200px",
               }}
             >
@@ -940,9 +946,13 @@ export function ResearchPanel() {
             />
           </div>
 
-          {/* Columna derecha — datos fuente sticky (30%) */}
+          {/* Datos fuente + TradingView */}
           <div
-            style={{
+            style={isMobile ? {
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+            } : {
               flex: "0 0 calc(30% - 16px)",
               display: "flex",
               flexDirection: "column",
@@ -951,10 +961,10 @@ export function ResearchPanel() {
               position: "relative",
             }}
           >
-            {/* Sticky wrapper */}
+            {/* Sticky wrapper (desktop only) */}
             <div
               style={{
-                position: "sticky",
+                position: isMobile ? undefined : "sticky",
                 top: 0,
                 display: "flex",
                 flexDirection: "column",
