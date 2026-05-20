@@ -103,7 +103,7 @@ Deno.serve(async (req: Request) => {
     // GET /market-data/{symbol} — Alpaca bars para 52w high/low + AV para fundamentales
     if (endpoint[0] === "market-data" && endpoint[1]) {
       const symbol = endpoint[1].toUpperCase();
-      return await getMarketData(symbol, supabase, alpacaKey ?? null, alpacaSecret ?? null, avKey ?? null, fmpKey ?? null);
+      return await getMarketData(symbol, supabase, alpacaKey ?? null, alpacaSecret ?? null);
     }
 
     // GET /finviz/{symbol}  (ahora usa Yahoo Finance internamente)
@@ -269,7 +269,7 @@ function addDays(date: Date, days: number): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// getMarketData — Alpaca para price/52w/volume + AV/FMP para fundamentales
+// getMarketData — Alpaca bars para price/week_52_high/week_52_low/volume
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function getMarketData(
@@ -277,8 +277,6 @@ async function getMarketData(
   supabase: ReturnType<typeof createClient>,
   alpacaKey: string | null,
   alpacaSecret: string | null,
-  avKey: string | null,
-  fmpKey: string | null,
 ) {
   // 1. Cache
   const { data: cached } = await supabase
@@ -326,97 +324,12 @@ async function getMarketData(
             `[MarketData] Alpaca ${symbol}: price=${currentPrice} 52h=${w52h} 52l=${w52l} bars=${bars.length}`,
           );
         } else {
-          console.warn(`[MarketData] Alpaca returned 0 bars for ${symbol}`);
+          console.warn(`[MarketData] Alpaca returned 0 bars for ${symbol} — returning null`);
+          return json({ source: "alpaca", data: null });
         }
       }
     } catch (e) {
       console.error(`[MarketData] Alpaca fetch error for ${symbol}:`, e);
-    }
-  }
-
-  // 3. Fundamentales: AV primero, luego FMP
-  let epsCurr: number | null = null;
-  let epsNext: number | null = null;
-  let epsGrowthPct: number | null = null;
-  let revenueGrowth: number | null = null;
-  let peRatio: number | null = null;
-  let nextEarningsDate: string | null = null;
-  let marketCap: number | null = null;
-  let name: string = symbol;
-
-  if (avKey) {
-    try {
-      const [overviewRes, quoteRes] = await Promise.all([
-        fetch(`${AV_BASE}?function=OVERVIEW&symbol=${symbol}&apikey=${avKey}`),
-        fetch(`${AV_BASE}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${avKey}`),
-      ]);
-      const [overviewBody, quoteBody] = await Promise.all([
-        overviewRes.text(),
-        quoteRes.text(),
-      ]);
-      const av = JSON.parse(overviewBody) as Record<string, string>;
-      const gqRaw = JSON.parse(quoteBody);
-      const gq: Record<string, string> = gqRaw["Global Quote"] ?? {};
-
-      if (av.Symbol && !av.Note && !av.Information) {
-        const n = (key: string) => {
-          const v = parseFloat(av[key] ?? "");
-          return isNaN(v) ? null : v;
-        };
-        epsCurr = n("EPS");
-        epsNext = n("ForwardEPS");
-        epsGrowthPct =
-          epsNext && epsCurr && epsCurr !== 0
-            ? ((epsNext - epsCurr) / Math.abs(epsCurr)) * 100
-            : null;
-        peRatio = n("PERatio");
-        marketCap = n("MarketCapitalization");
-        nextEarningsDate = av.NextEarningsDate ?? null;
-        name = av.Name ?? symbol;
-        // Use AV price/volume only as fallback if Alpaca gave nothing
-        if (currentPrice === null) {
-          currentPrice = parseFloat(gq["05. price"] ?? "") || null;
-        }
-        if (currentVolume === null) {
-          currentVolume = parseFloat(gq["06. volume"] ?? "") || null;
-        }
-        console.log(`[MarketData] AV ${symbol}: EPS=${epsCurr} PE=${peRatio}`);
-      } else {
-        console.warn(`[MarketData] AV rate-limited or empty for ${symbol}`);
-      }
-    } catch (e) {
-      console.error(`[MarketData] AV fetch error for ${symbol}:`, e);
-    }
-  } else if (fmpKey) {
-    try {
-      const [quoteRes, estimatesRes] = await Promise.all([
-        fetch(`${FMP_BASE}/quote/${symbol}?apikey=${fmpKey}`),
-        fetch(`${FMP_BASE}/analyst-estimates/${symbol}?limit=1&apikey=${fmpKey}`),
-      ]);
-      if (quoteRes.status !== 403) {
-        const [quoteData, estimatesData] = await Promise.all([
-          quoteRes.json(),
-          estimatesRes.json(),
-        ]);
-        const q = Array.isArray(quoteData) ? quoteData[0] : null;
-        const est = Array.isArray(estimatesData) ? estimatesData[0] : null;
-        if (q) {
-          epsCurr = q.eps ?? null;
-          epsNext = est?.estimatedEpsAvg ?? null;
-          epsGrowthPct =
-            epsNext && epsCurr && epsCurr !== 0
-              ? ((epsNext - epsCurr) / Math.abs(epsCurr)) * 100
-              : null;
-          peRatio = q.pe ?? null;
-          marketCap = q.marketCap ?? null;
-          nextEarningsDate = q.earningsAnnouncement?.split("T")[0] ?? null;
-          name = q.name ?? symbol;
-          if (currentPrice === null) currentPrice = q.price ?? null;
-          if (currentVolume === null) currentVolume = q.volume ?? null;
-        }
-      }
-    } catch (e) {
-      console.error(`[MarketData] FMP fetch error for ${symbol}:`, e);
     }
   }
 
@@ -426,16 +339,16 @@ async function getMarketData(
     week_52_high: w52h,
     week_52_low: w52l,
     volume: currentVolume,
-    market_cap: marketCap,
-    eps_current: epsCurr,
-    eps_next_estimate: epsNext,
-    eps_growth_next_pct: epsGrowthPct,
-    revenue_growth_pct: revenueGrowth,
-    pe_ratio: peRatio,
-    next_earnings_date: nextEarningsDate,
-    next_earnings_estimate_eps: epsNext,
+    market_cap: null,
+    eps_current: null,
+    eps_next_estimate: null,
+    eps_growth_next_pct: null,
+    revenue_growth_pct: null,
+    pe_ratio: null,
+    next_earnings_date: null,
+    next_earnings_estimate_eps: null,
     price_change_pct_1d: null,
-    name,
+    name: symbol,
     fetched_at: new Date().toISOString(),
   };
 

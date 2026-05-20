@@ -676,13 +676,14 @@ export function ResearchPanel() {
               ¿QUÉ QUIERES SABER?
             </label>
             <div style={{ display: "flex", gap: "10px" }}>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
               <textarea
                 value={queryInput}
                 onChange={(e) => setQueryInput(e.target.value)}
                 placeholder="¿Conviene mantener? ¿Hay catalizadores próximos?"
                 rows={1}
                 style={{
-                  flex: 1,
+                  width: "100%",
                   background: "var(--bg-elevated)",
                   border: "1px solid var(--border-default)",
                   borderRadius: "6px",
@@ -702,6 +703,51 @@ export function ResearchPanel() {
                   e.target.style.borderColor = "var(--border-default)";
                 }}
               />
+              {/* Preguntas rápidas */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                {[
+                  "¿Niveles técnicos clave para hoy? Stop, target y setup para Plan de Vuelo.",
+                  "¿Conviene mantener o hay mejor momento para entrar?",
+                  "¿Es pullback comprable o cambio de tendencia?",
+                  "¿Mantengo o cierro? ¿Ajusto el stop?",
+                  "¿Conviene entrar antes o después de earnings?",
+                  "¿Hay setup válido hoy o esperamos?",
+                ].map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => setQueryInput(q)}
+                    style={{
+                      background: queryInput === q ? "rgba(59,130,246,0.15)" : "var(--bg-elevated)",
+                      border: `1px solid ${queryInput === q ? "rgba(59,130,246,0.5)" : "var(--border-default)"}`,
+                      borderRadius: "4px",
+                      padding: "3px 8px",
+                      fontSize: "11px",
+                      fontFamily: "Syne, system-ui, sans-serif",
+                      color: queryInput === q ? "var(--color-primary)" : "var(--text-secondary)",
+                      cursor: "pointer",
+                      transition: "all 120ms",
+                      lineHeight: "1.4",
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (queryInput !== q) {
+                        e.currentTarget.style.borderColor = "rgba(59,130,246,0.4)";
+                        e.currentTarget.style.color = "var(--text-primary)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (queryInput !== q) {
+                        e.currentTarget.style.borderColor = "var(--border-default)";
+                        e.currentTarget.style.color = "var(--text-secondary)";
+                      }
+                    }}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+              </div>
 
               {/* Botón */}
               <CosmicButton
