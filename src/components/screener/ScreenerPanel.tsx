@@ -3,7 +3,8 @@ import { ScreenerCriteriaForm } from "./ScreenerCriteriaForm";
 import { ScreenerResultsTable } from "./ScreenerResultsTable";
 import { useScreener } from "../../hooks/useScreener";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import { Layers, Zap } from "lucide-react";
+import { Layers, Zap, Download } from "lucide-react";
+import { exportToMarkdown, exportToPDF } from "../../lib/exportUtils";
 
 export function ScreenerPanel() {
   const {
@@ -141,18 +142,61 @@ export function ScreenerPanel() {
             </div>
 
             {lastResult && (
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "var(--text-muted)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                <Zap size={14} color="var(--color-warning)" />
-                {lastResult.total_passed_filters} resultados de{" "}
-                {lastResult.total_candidates_evaluated} analizados
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--text-muted)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <Zap size={14} color="var(--color-warning)" />
+                  {lastResult.total_passed_filters} resultados de{" "}
+                  {lastResult.total_candidates_evaluated} analizados
+                </div>
+                
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() => exportToMarkdown(lastResult.results, lastResult.ai_summary)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      background: "var(--bg-elevated)",
+                      border: "1px solid var(--border-default)",
+                      padding: "4px 10px",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      color: "var(--text-primary)",
+                      cursor: "pointer",
+                      fontWeight: 500,
+                    }}
+                  >
+                    <Download size={14} />
+                    Markdown
+                  </button>
+                  <button
+                    onClick={() => exportToPDF(lastResult.results, lastResult.ai_summary)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      background: "var(--bg-elevated)",
+                      border: "1px solid var(--border-default)",
+                      padding: "4px 10px",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      color: "var(--text-primary)",
+                      cursor: "pointer",
+                      fontWeight: 500,
+                    }}
+                  >
+                    <Download size={14} />
+                    PDF
+                  </button>
+                </div>
               </div>
             )}
           </div>
