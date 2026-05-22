@@ -188,7 +188,7 @@ Devolvé exactamente este schema JSON:
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
+        model: "claude-sonnet-4-5",
         max_tokens: 2000,
         system: "Sos un gestor de portafolio senior con 20 años de experiencia. Analizás portafolios de forma holística — no activo por activo sino como un sistema. Respondés en español. Sos directo, concreto y das recomendaciones accionables. IMPORTANTE: Devolvés ÚNICAMENTE JSON válido sin markdown ni texto adicional.",
         messages: [{ role: "user", content: userPrompt }],
@@ -230,7 +230,7 @@ Devolvé exactamente este schema JSON:
         has_position: true,
         total_portfolio_equity: totalEquity,
       },
-      model: "claude-3-5-sonnet-20241022",
+      model: "claude-sonnet-4-5",
     });
 
     return jsonResponse({

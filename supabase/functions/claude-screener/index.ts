@@ -287,7 +287,7 @@ Respondé SOLO en JSON con este formato exacto (sin markdown, sin backticks):
 
     console.log("[E] Sending to Claude:", candidateData.length, "candidates");
     const response = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-20241022",
+      model: "claude-sonnet-4-5",
       max_tokens: 2500,
       system:
         "Eres un analista de inversiones experto. Respondes SOLO en formato JSON válido, sin markdown.",

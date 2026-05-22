@@ -46,7 +46,7 @@ TradeOS Personal es una plataforma de inversiones y trading unificada para un us
 | Broker NYSE | Alpaca Markets API | Paper + live trading NYSE/NASDAQ + market data |
 | Broker Cripto | Binance API | Spot trading cripto |
 | Fundamentales | Financial Modeling Prep (FMP) API | EPS, revenue growth, guidance, P/E, earnings calendar |
-| Análisis IA | Claude API (claude-sonnet-4-20250514) | Research Agent, Screener, Portfolio Doctor |
+| Análisis IA | Claude API (claude-sonnet-4-5) | Research Agent, Screener, Portfolio Doctor |
 | Charts | Recharts + TradingView Widget (embed) | Equity chart histórico + OHLCV por símbolo |
 | Estado | Zustand | Estado global liviano |
 | Fetching | TanStack Query (React Query) | Cache, refetch, loading states |
@@ -284,7 +284,7 @@ interface ResearchEntry {
   analysis: string
   data_used: ResearchDataSnapshot
   portfolio_context: PortfolioContext
-  model: string                       // 'claude-sonnet-4-20250514'
+  model: string                       // 'claude-sonnet-4-5'
   created_at: Date
 }
 
