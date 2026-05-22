@@ -54,15 +54,22 @@ Deno.serve(async (req: Request) => {
   const alpacaKey = Deno.env.get("ALPACA_API_KEY");
   const alpacaSecret = Deno.env.get("ALPACA_SECRET_KEY");
 
-  const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
-    global: { headers: { Authorization: authHeader } },
-  });
+  let isServiceRole = false;
+  if (authHeader === `Bearer ${supabaseSvc}`) {
+    isServiceRole = true;
+  }
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabaseAuth.auth.getUser();
-  if (authError || !user) return err("Unauthorized", 401);
+  if (!isServiceRole) {
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser();
+    if (authError || !user) return err("Unauthorized", 401);
+  }
 
   const supabase = createClient(supabaseUrl, supabaseSvc);
 

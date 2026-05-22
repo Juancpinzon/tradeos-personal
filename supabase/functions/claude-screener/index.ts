@@ -105,6 +105,21 @@ Deno.serve(async (req: Request) => {
   const { criteria } = body;
   if (!criteria) return errJson("criteria is required");
 
+  // ── Step 0: Check if screener_universe is empty ──────────────────────────────
+  const { count, error: countError } = await supabase
+    .from("screener_universe")
+    .select("*", { count: "exact", head: true });
+
+  if (countError) {
+    console.error("[Screener] Error checking universe count:", countError);
+    return errJson(`Failed to check universe status: ${countError.message}`, 500);
+  }
+
+  if (count === 0 || count === null) {
+    console.warn("[Screener] screener_universe is empty. Returning universe_not_synced error.");
+    return errJson("universe_not_synced", 400);
+  }
+
   // ── Step A: Query screener_universe ─────────────────────────────────────────
   // deno-lint-ignore no-explicit-any
   let query: any = supabase.from("screener_universe").select("*");
@@ -261,7 +276,7 @@ Respondé SOLO en JSON con este formato exacto (sin markdown, sin backticks):
 
   console.log("[E] Sending to Claude:", candidateData.length, "candidates");
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
+    model: "claude-3-5-sonnet-20241022",
     max_tokens: 2500,
     system:
       "Eres un analista de inversiones experto. Respondes SOLO en formato JSON válido, sin markdown.",

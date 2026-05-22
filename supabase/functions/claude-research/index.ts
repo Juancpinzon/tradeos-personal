@@ -250,7 +250,7 @@ Deno.serve(async (req: Request) => {
   const anthropic = new Anthropic({ apiKey: anthropicKey });
 
   const stream = await anthropic.messages.stream({
-    model: "claude-sonnet-4-5",
+    model: "claude-3-5-sonnet-20241022",
     max_tokens: 2000,
     system: systemPrompt,
     messages: [{ role: "user", content: `${dataCtx}\n\nPregunta: ${query}` }],
@@ -292,7 +292,7 @@ Deno.serve(async (req: Request) => {
         analysis: fullAnalysis,
         data_used: dataSnapshot,
         portfolio_context: portfolioCtx,
-        model: "claude-sonnet-4-20250514",
+        model: "claude-3-5-sonnet-20241022",
       });
     } catch (e) {
       console.error("Streaming error:", e);

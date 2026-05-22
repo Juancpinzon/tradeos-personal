@@ -88,6 +88,24 @@ export function useScreener() {
       );
 
       if (!response.ok) {
+        if (response.status === 400) {
+          try {
+            const body = await response.json();
+            if (body.error === "universe_not_synced") {
+              window.dispatchEvent(
+                new CustomEvent("tradeos-toast", {
+                  detail: {
+                    title: "Error de Sincronización",
+                    message: "El universo del buscador no se encuentra sincronizado. Por favor, corre la sincronización.",
+                    color: "var(--color-loss)",
+                  },
+                })
+              );
+            }
+          } catch (e) {
+            console.error("Failed to parse error response:", e);
+          }
+        }
         throw new Error("Screener execution failed");
       }
 
