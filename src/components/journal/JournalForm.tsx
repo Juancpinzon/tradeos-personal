@@ -4,11 +4,11 @@
 // Props mode: sin hooks, sin Supabase — solo visual
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { EmotionalState, ConfidenceLevel, SetupType, JournalEntry } from '../../types'
-import { X, ChevronRight } from 'lucide-react'
+import { X, ChevronRight, Lock } from 'lucide-react'
 import { useFlightPlan } from '../../hooks/useFlightPlan'
-import { useEffect } from 'react'
+import { useOrders } from '../../hooks/useOrders'
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -78,24 +78,54 @@ export default function JournalForm({
   const [setupType,      setSetupType]      = useState<SetupType | ''>('')
   const [stopLoss,       setStopLoss]       = useState('')
   const [target,         setTarget]         = useState('')
+  const [isTradeTypeLocked, setIsTradeTypeLocked] = useState(false)
 
   const { plan, updateCandidate } = useFlightPlan()
+  const { orders } = useOrders()
 
   const resolvedSymbol     = symbolProp ?? symbolInput
   const resolvedSide       = sideProp   ?? sideInput
   const resolvedEntryPrice = entryPriceProp ?? (entryPriceInput ? parseFloat(entryPriceInput) : undefined)
 
-  // Precarga desde Flight Plan
+  // Find matching flight plan candidate
+  const candidate = useMemo(() => {
+    if (!plan || !resolvedSymbol) return null
+    return plan.candidates?.find(c => c.symbol.toUpperCase() === resolvedSymbol.toUpperCase()) || null
+  }, [plan, resolvedSymbol])
+
+  // Find matching order
+  const preloadedOrder = useMemo(() => {
+    if (orderId) {
+      return orders.find(o => o.id === orderId) || null
+    }
+    if (resolvedSymbol) {
+      return orders.find(o => o.symbol.toUpperCase() === resolvedSymbol.toUpperCase()) || null
+    }
+    return null
+  }, [orders, orderId, resolvedSymbol])
+
+  // Precarga desde Flight Plan o la orden
   useEffect(() => {
-    if (!plan || !resolvedSymbol) return
-    const candidate = plan.candidates?.find(c => c.symbol === resolvedSymbol)
     if (candidate) {
       setThesis(prev => prev || candidate.entry_thesis || '')
       setSetupType(prev => prev || (candidate.setup_type as SetupType) || '')
       setStopLoss(prev => prev || candidate.stop_loss?.toString() || '')
       setTarget(prev => prev || candidate.target?.toString() || '')
     }
-  }, [plan, resolvedSymbol])
+  }, [candidate])
+
+  // Precarga de trade_type (con opción de bloqueo y cambio)
+  useEffect(() => {
+    if (preloadedOrder?.trade_type) {
+      setTradeType(preloadedOrder.trade_type)
+      setIsTradeTypeLocked(true)
+    } else if (candidate?.trade_type) {
+      setTradeType(candidate.trade_type)
+      setIsTradeTypeLocked(true)
+    } else {
+      setIsTradeTypeLocked(false)
+    }
+  }, [preloadedOrder, candidate])
 
   // Auto R/R
   const rrNum = resolvedEntryPrice && stopLoss && target
@@ -265,32 +295,70 @@ export default function JournalForm({
 
           {/* Tipo de operación */}
           <div>
-            <label style={labelStyle}>
-              Tipo de operación <span style={{ color: '#ef4444' }}>*</span>
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={labelStyle}>
+                Tipo de operación <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              {isTradeTypeLocked && (
+                <button
+                  type="button"
+                  onClick={() => setIsTradeTypeLocked(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-primary)',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                    transition: 'all 0.12s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.15)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.08)'
+                  }}
+                >
+                  <Lock size={10} /> Cambiar
+                </button>
+              )}
+            </div>
+
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
               {([
                 { value: 'intraday', label: 'Intraday (Día)', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
                 { value: 'swing', label: 'Swing (Varios días)', color: '#a855f7', bg: 'rgba(163,116,255,0.12)' },
               ] as const).map(({ value, label, color, bg }) => {
                 const selected = tradeType === value
+                const isDisabled = isTradeTypeLocked
+                const showAsSelected = selected
+                const opacity = isTradeTypeLocked ? (showAsSelected ? 1 : 0.3) : 1
+
                 return (
                   <button
                     key={value}
                     type="button"
+                    disabled={isDisabled}
                     onClick={() => setTradeType(selected ? null : value)}
                     style={{
                       flex: 1,
                       padding: '0.5rem',
                       borderRadius: '0.375rem',
-                      border: `1px solid ${selected ? color : 'var(--border-default)'}`,
-                      backgroundColor: selected ? bg : 'transparent',
-                      color: selected ? color : 'var(--text-muted)',
+                      border: `1px solid ${showAsSelected ? color : 'var(--border-default)'}`,
+                      backgroundColor: showAsSelected ? bg : 'transparent',
+                      color: showAsSelected ? color : 'var(--text-muted)',
                       fontSize: '0.8125rem',
-                      fontWeight: selected ? 600 : 400,
-                      cursor: 'pointer',
+                      fontWeight: showAsSelected ? 600 : 400,
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
                       transition: 'all 150ms ease',
                       fontFamily: '"Syne", sans-serif',
+                      opacity,
                     }}
                   >
                     {label}
@@ -298,6 +366,11 @@ export default function JournalForm({
                 )
               })}
             </div>
+            {isTradeTypeLocked && (
+              <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '4px', fontStyle: 'italic' }}>
+                Precargado automáticamente desde {preloadedOrder ? 'la orden ejecutada' : 'el plan de vuelo'}.
+              </p>
+            )}
           </div>
 
           {/* Tesis de entrada */}

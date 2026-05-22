@@ -91,6 +91,7 @@ export interface Order {
   submitted_at: string;
   filled_at?: string;
   notes?: string;
+  trade_type?: "intraday" | "swing";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -344,6 +345,7 @@ export interface OrderPayload {
   stop_loss_price: number;
   target_price?: number;
   risk_reward_ratio?: number;
+  trade_type?: "intraday" | "swing";
 }
 
 // Respuesta de Alpaca (subset de campos relevantes)
@@ -451,6 +453,7 @@ export interface FlightPlanCandidate {
   flight_plan_id: string;
   symbol: string;
   setup_type: string;
+  trade_type: "intraday" | "swing";
   current_price?: number;
   support_level?: number;
   stop_loss: number;

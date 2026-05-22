@@ -15,6 +15,7 @@ interface Props {
 export function FlightPlanCandidateModal({ onAdd, onClose }: Props) {
   const [symbol, setSymbol] = useState('')
   const [setup, setSetup] = useState('breakout')
+  const [tradeType, setTradeType] = useState<'intraday' | 'swing'>('intraday')
   const [price, setPrice] = useState('')
   const [stop, setStop] = useState('')
   const [target, setTarget] = useState('')
@@ -33,6 +34,7 @@ export function FlightPlanCandidateModal({ onAdd, onClose }: Props) {
     onAdd({
       symbol: symbol.toUpperCase(),
       setup_type: setup,
+      trade_type: tradeType,
       current_price: p,
       stop_loss: s,
       target: t,
@@ -75,6 +77,35 @@ export function FlightPlanCandidateModal({ onAdd, onClose }: Props) {
                 <option value="earnings_play">Earnings Play</option>
                 <option value="range">Range</option>
               </select>
+            </div>
+          </div>
+
+          <div className="fp-field" style={{ marginBottom: '16px', marginTop: '12px' }}>
+            <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: '700', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '6px' }}>
+              Tipo de Trade
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {(['intraday', 'swing'] as const).map(type => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setTradeType(type)}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: `1px solid ${tradeType === type ? 'var(--color-primary)' : 'var(--border-subtle)'}`,
+                    backgroundColor: tradeType === type ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-elevated)',
+                    color: tradeType === type ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontWeight: tradeType === type ? '700' : '400',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {type === 'intraday' ? 'Intraday' : 'Swing'}
+                </button>
+              ))}
             </div>
           </div>
 

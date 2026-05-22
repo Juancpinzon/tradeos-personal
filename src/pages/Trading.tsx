@@ -20,6 +20,7 @@ import type { OrderDraft } from '../components/trading/OrderForm'
 import type { UserSettings } from '../types'
 
 import { useSettings } from '../hooks/useSettings'
+import { useFlightPlan } from '../hooks/useFlightPlan'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trading page principal
@@ -37,6 +38,7 @@ export default function Trading() {
   const { account, positions } = usePortfolio()
   const { items: watchlistItems } = useWatchlist()
   const { data: settings } = useSettings()
+  const { plan } = useFlightPlan()
 
   const userSettings: UserSettings = settings || {
     id: 'loading',
@@ -60,6 +62,14 @@ export default function Trading() {
   const currentPosition = positions.find(p => p.symbol === selectedSymbol)
   const portfolioWeightAtOrder = currentPosition?.portfolio_weight_pct ?? null
 
+  // Suggested trade type from flight plan
+  const suggestedTradeType = useMemo(() => {
+    if (!pendingDraft || !plan) return null
+    const candidate = plan.candidates?.find(
+      c => c.symbol.toUpperCase() === pendingDraft.symbol.toUpperCase()
+    )
+    return candidate?.trade_type ?? null
+  }, [pendingDraft, plan])
 
   // ── Handler: OrderForm → review ────────────────────────────────────────────
   const handleReviewOrder = useCallback((draft: OrderDraft) => {
@@ -68,7 +78,7 @@ export default function Trading() {
   }, [])
 
   // ── Handler: modal confirm ─────────────────────────────────────────────────
-  const handleConfirmOrder = useCallback(async () => {
+  const handleConfirmOrder = useCallback(async (tradeType: 'intraday' | 'swing') => {
     if (!pendingDraft) return
     setSubmitError(null)
 
@@ -104,6 +114,7 @@ export default function Trading() {
         stop_loss_price:          pendingDraft.stop_loss as number,
         target_price:             pendingDraft.target ?? undefined,
         risk_reward_ratio:        rrRatio,
+        trade_type:               tradeType,
       })
 
       setLastConfirmed(`${pendingDraft.side.toUpperCase()} ${pendingDraft.qty} ${pendingDraft.symbol}`)
@@ -208,6 +219,7 @@ export default function Trading() {
           portfolioWeightAtOrder={portfolioWeightAtOrder}
           userSettings={userSettings}
           isSubmitting={isSubmitting}
+          suggestedTradeType={suggestedTradeType}
           onConfirm={handleConfirmOrder}
           onCancel={handleCancelModal}
         />

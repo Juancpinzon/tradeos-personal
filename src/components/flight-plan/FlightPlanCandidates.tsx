@@ -49,7 +49,9 @@ export function FlightPlanCandidates({ candidates, onAdd, onDelete, onNavigateTo
               <div className="fp-candidate-card__header">
                 <div className="fp-candidate-card__symbol-info">
                   <span className="fp-candidate-card__symbol">{candidate.symbol}</span>
-                  <span className="fp-candidate-card__setup">{candidate.setup_type.toUpperCase()}</span>
+                  <span className="fp-candidate-card__setup">
+                    {candidate.setup_type.toUpperCase()} • {candidate.trade_type.toUpperCase()}
+                  </span>
                 </div>
                 <div className="fp-candidate-card__actions">
                   <button 

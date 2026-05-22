@@ -286,6 +286,7 @@ Deno.serve(async (req: Request) => {
         stop_loss_price,
         target_price,
         risk_reward_ratio,
+        trade_type,
       } = body;
       if (!symbol) return errJson("symbol requerido");
       if (!side || !["buy", "sell"].includes(side))
@@ -343,6 +344,7 @@ Deno.serve(async (req: Request) => {
           stop_loss_price: stop_loss_price ?? null,
           target_price: target_price ?? null,
           risk_reward_ratio: risk_reward_ratio ?? null,
+          trade_type: trade_type ?? null,
         })
         .select()
         .single();
@@ -413,4 +415,5 @@ interface OrderSubmit {
   stop_loss_price?: number;
   target_price?: number;
   risk_reward_ratio?: number;
+  trade_type?: "intraday" | "swing";
 }

@@ -5,7 +5,7 @@
 // Confirmar: verde si BUY, rojo si SELL. NUNCA omitir este modal.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, AlertTriangle, TrendingUp, TrendingDown, Shield } from 'lucide-react'
 import { formatCurrency, formatPercent, formatQty } from '../../lib/formatters'
 import type { OrderDraft } from './OrderForm'
@@ -19,8 +19,9 @@ interface ConfirmOrderModalProps {
   portfolioWeightAtOrder: number | null  // % peso actual en el símbolo
   userSettings: UserSettings
   isSubmitting: boolean
-  onConfirm: () => void
+  onConfirm: (tradeType: 'intraday' | 'swing') => void
   onCancel: () => void
+  suggestedTradeType?: 'intraday' | 'swing' | null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -33,8 +34,16 @@ export default function ConfirmOrderModal({
   isSubmitting,
   onConfirm,
   onCancel,
+  suggestedTradeType,
 }: ConfirmOrderModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
+  const [tradeType, setTradeType] = useState<'intraday' | 'swing' | null>(null)
+
+  useEffect(() => {
+    if (suggestedTradeType) {
+      setTradeType(suggestedTradeType)
+    }
+  }, [suggestedTradeType])
 
   // Cerrar con Escape
   useEffect(() => {
@@ -239,6 +248,48 @@ export default function ConfirmOrderModal({
             </div>
           )}
 
+          {/* Selector obligatorio de trade_type */}
+          <div style={{
+            padding: '12px',
+            borderRadius: '6px',
+            backgroundColor: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid var(--border-subtle)',
+            marginTop: '8px',
+            marginBottom: '4px'
+          }}>
+            <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: '700', color: 'var(--text-secondary)', letterSpacing: '0.08rem', marginBottom: '8px' }}>
+              TIPO DE OPERACIÓN <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {(['intraday', 'swing'] as const).map(type => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setTradeType(type)}
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    borderRadius: '4px',
+                    border: `1px solid ${tradeType === type ? (type === 'intraday' ? 'var(--color-primary)' : '#a855f7') : 'var(--border-default)'}`,
+                    backgroundColor: tradeType === type ? (type === 'intraday' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(168, 85, 247, 0.15)') : 'transparent',
+                    color: tradeType === type ? (type === 'intraday' ? 'var(--color-primary)' : '#c084fc') : 'var(--text-muted)',
+                    fontWeight: '700',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {type === 'intraday' ? 'INTRADAY' : 'SWING'}
+                </button>
+              ))}
+            </div>
+            {!tradeType && (
+              <span style={{ display: 'block', fontSize: '0.62rem', color: '#ef4444', marginTop: '6px' }}>
+                Seleccioná el tipo de trade para habilitar la confirmación
+              </span>
+            )}
+          </div>
+
           {/* Modo paper */}
           <div className="modal-paper-notice">
             <span className="badge badge-paper">PAPER TRADING</span>
@@ -260,8 +311,8 @@ export default function ConfirmOrderModal({
           <button
             id="modal-confirm-btn"
             className={`modal-btn ${isBuy ? 'modal-btn--buy' : 'modal-btn--sell'}`}
-            onClick={onConfirm}
-            disabled={isSubmitting}
+            onClick={() => tradeType && onConfirm(tradeType)}
+            disabled={isSubmitting || !tradeType}
             type="button"
           >
             {isSubmitting ? (

@@ -1143,3 +1143,15 @@ Nuevo ítem en Sidebar entre Journal y Screener: 📋 Plan de Vuelo → /flight-
 - [x] **Marea de Correlación (Pro)**: Lógica de protección que alerta sobre compras Cripto cuando SPY es Bearish
 - [x] **UI Split**: Separación de campos "Símbolo" y "Nombre de Compañía" para mayor precisión
 - [x] **Glosario Integrado**: Términos técnicos accesibles desde la Academia
+
+---
+
+## 🚀 Fase 12: Integración de Tipo de Operación (Intraday/Swing) [COMPLETADA]
+
+- [x] **Flujo Unificado**: Campo `trade_type` (`'intraday' | 'swing'`) propagado desde el Plan de Vuelo Diario, a través de la Confirmación de la Orden, hasta el Diario de Trading.
+- [x] **Plan de Vuelo Diario**: Selector premium e intuitivo en `FlightPlanCandidateModal` y visualización estilizada en la cabecera de las tarjetas de candidatos (ej. `BREAKOUT • INTRADAY`).
+- [x] **Confirmación de Orden**: Selector obligatorio de `trade_type` en `ConfirmOrderModal` que bloquea la ejecución de la orden hasta que el tipo esté seleccionado. Precarga automáticamente la sugerencia si el símbolo coincide con algún candidato del plan del día.
+- [x] **Persistencia en Backend**: Sincronización a través de la Edge Function proxy con guardado directo en la columna `trade_type` de la tabla `orders` en base de datos.
+- [x] **Diario Inteligente**: El formulario de diario `JournalForm` precarga inteligentemente el `trade_type` desde la orden vinculada o el plan de vuelo. Se presenta en un estado "locked" de lectura premium para asegurar la coherencia del flujo de trabajo, con una opción elegante de "Cambiar" para desbloquear y sobreescribir de forma manual.
+- [x] **Estadísticas de Diario Robustas**: Mantenimiento y separación exacta en `JournalStats` del win rate y profit factor por tipo de operación (`intraday` vs `swing`), y badges estilizados en `JournalList`.
+- [x] **Validación de Código y Compilación**: Tipado estricto propagado a través de todas las interfaces clave en `src/types/index.ts` y compilación Vite exitosa sin errores de typecheck.
