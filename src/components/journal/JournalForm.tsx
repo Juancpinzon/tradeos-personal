@@ -72,6 +72,7 @@ export default function JournalForm({
 
   // PRE-TRADE fields
   const [thesis,         setThesis]         = useState('')
+  const [tradeType,      setTradeType]      = useState<'intraday' | 'swing' | null>(null)
   const [emotionalState, setEmotionalState] = useState<EmotionalState | null>(null)
   const [confidence,     setConfidence]     = useState<ConfidenceLevel | null>(null)
   const [setupType,      setSetupType]      = useState<SetupType | ''>('')
@@ -106,15 +107,17 @@ export default function JournalForm({
     resolvedSymbol.trim().length > 0 &&
     thesis.trim().length > 0 &&
     emotionalState !== null &&
-    confidence !== null
+    confidence !== null &&
+    tradeType !== null
 
   const handleSave = () => {
-    if (!isValid || !emotionalState || !confidence) return
+    if (!isValid || !emotionalState || !confidence || !tradeType) return
     onSave({
       order_id:            orderId,
       symbol:              resolvedSymbol.trim().toUpperCase(),
       side:                resolvedSide,
       asset_class:         'equity',
+      trade_type:          tradeType,
       entry_thesis:        thesis.trim(),
       emotional_state:     emotionalState,
       confidence_level:    confidence,
@@ -259,6 +262,43 @@ export default function JournalForm({
           gap: '1.125rem',
         }}>
           <h3 style={sectionTitleStyle('#3b82f6')}>Pre-Trade</h3>
+
+          {/* Tipo de operación */}
+          <div>
+            <label style={labelStyle}>
+              Tipo de operación <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+              {([
+                { value: 'intraday', label: 'Intraday (Día)', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
+                { value: 'swing', label: 'Swing (Varios días)', color: '#a855f7', bg: 'rgba(163,116,255,0.12)' },
+              ] as const).map(({ value, label, color, bg }) => {
+                const selected = tradeType === value
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setTradeType(selected ? null : value)}
+                    style={{
+                      flex: 1,
+                      padding: '0.5rem',
+                      borderRadius: '0.375rem',
+                      border: `1px solid ${selected ? color : 'var(--border-default)'}`,
+                      backgroundColor: selected ? bg : 'transparent',
+                      color: selected ? color : 'var(--text-muted)',
+                      fontSize: '0.8125rem',
+                      fontWeight: selected ? 600 : 400,
+                      cursor: 'pointer',
+                      transition: 'all 150ms ease',
+                      fontFamily: '"Syne", sans-serif',
+                    }}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           {/* Tesis de entrada */}
           <div>

@@ -207,6 +207,7 @@ export interface JournalEntry {
 
   // PRE-TRADE
   entry_thesis: string; // obligatorio
+  trade_type: "intraday" | "swing";
   setup_type?: SetupType;
   planned_stop_loss?: number;
   planned_target?: number;

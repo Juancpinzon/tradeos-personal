@@ -310,6 +310,18 @@ function JournalRow({
               {SETUP_LABELS[entry.setup_type]}
             </span>
           )}
+          {entry.trade_type && (
+            <span style={{
+              fontSize: '0.5625rem', padding: '0.1rem 0.375rem', borderRadius: '0.2rem',
+              backgroundColor: entry.trade_type === 'intraday' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(168, 85, 247, 0.12)',
+              color: entry.trade_type === 'intraday' ? '#3b82f6' : '#a855f7',
+              border: `1px solid ${entry.trade_type === 'intraday' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(168, 85, 247, 0.25)'}`,
+              textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0,
+              fontWeight: 600,
+            }}>
+              {entry.trade_type}
+            </span>
+          )}
           {isPending && (
             <span style={{
               fontSize: '0.5625rem', padding: '0.1rem 0.375rem', borderRadius: '0.2rem',

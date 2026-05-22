@@ -332,6 +332,7 @@ interface JournalEntry {
 
   // PRE-TRADE
   entry_thesis: string                // obligatorio: por qué entrás
+  trade_type: 'intraday' | 'swing'     // obligatorio: tipo de trade
   setup_type?: 'breakout' | 'pullback' | 'earnings_play' | 'swing' | 'reversal' | 'other'
   planned_stop_loss?: number
   planned_target?: number
@@ -508,11 +509,11 @@ interface ScreenerResultItem {
 4. Modal expandible en Dashboard; guardado en `research_entries` con symbol='PORTFOLIO'
 
 ### Flujo 5: Trading Journal
-1. Al ejecutar una orden → `JournalForm` aparece automáticamente con order_id prellenado
-2. Campos obligatorios: `entry_thesis`, `emotional_state`, `confidence_level`
-3. Al cerrar posición (orden de venta) → notificación invita al post-mortem
-4. Post-mortem: `outcome`, `what_went_right`, `what_went_wrong`, `lesson`, `followed_plan`
-5. `JournalStats` calcula: win rate, avg win/loss, profit factor, tasa de "seguí el plan", errores frecuentes por tag
+1. Al ejecutar una orden o crear una entrada manual → `JournalForm` aparece con `entry_thesis`, `trade_type`, `emotional_state`, `confidence_level` como campos obligatorios.
+2. `trade_type` ('intraday' | 'swing') es visible en `JournalList` mediante badges de color y en `JournalStats`.
+3. `JournalStats` separa y muestra de forma independiente el Win Rate y el Profit Factor para trades `intraday` y `swing`.
+4. Al cerrar una posición → se invita a completar el post-mortem (`outcome`, `what_went_right`, `what_went_wrong`, `lesson`, `followed_plan`).
+5. **Recordatorio de revisión semanal**: Los domingos, si hay entradas de journal creadas en la semana actual (desde el lunes 00:00) que no tienen el post-mortem completado (`outcome` no definido), se muestra un banner de advertencia premium en la parte superior del Dashboard: *"Tenés X operaciones sin post-mortem esta semana"*, con enlace directo para resolverlas.
 
 ### Flujo 6: Screener
 1. Cron diario `screener-universe-sync` cachea universo de Alpaca en `screener_universe` (filtro grueso: market cap > $500M)

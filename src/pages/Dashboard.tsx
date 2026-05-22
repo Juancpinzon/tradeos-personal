@@ -8,6 +8,8 @@ import { usePortfolio } from '../hooks/usePortfolio'
 import { useEarnings } from '../hooks/useEarnings'
 import { useFlightPlan } from '../hooks/useFlightPlan'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useJournal } from '../hooks/useJournal'
+import { AlertTriangle } from 'lucide-react'
 import EquityChart from '../components/portfolio/EquityChart'
 import PortfolioDoctor from '../components/portfolio/PortfolioDoctor'
 import PositionCard from '../components/portfolio/PositionCard'
@@ -200,11 +202,33 @@ export default function Dashboard() {
     isSyncing,
     error,
   } = usePortfolio()
+  const { entries } = useJournal()
   const { plan } = useFlightPlan()
   const { events: earningsEvents } = useEarnings()
   const [doctorOpen, setDoctorOpen] = useState(false)
   const navigate = useNavigate()
   const isMobile = useMediaQuery('(max-width: 767px)')
+
+  // Recordatorio de revisión semanal (domingos)
+  const today = new Date()
+  const isSunday = today.getDay() === 0
+
+  const getStartOfWeek = (d: Date) => {
+    const date = new Date(d)
+    const day = date.getDay()
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1)
+    const monday = new Date(date.setDate(diff))
+    monday.setHours(0, 0, 0, 0)
+    return monday
+  }
+
+  const startOfWeek = getStartOfWeek(today)
+  const weeklyPendingPostMortems = entries.filter((e) => {
+    const entryDate = new Date(e.created_at)
+    return entryDate >= startOfWeek && !e.outcome
+  })
+
+  const showReviewReminder = isSunday && weeklyPendingPostMortems.length > 0
 
   // Nunca bloquear el render con spinner de página completa.
   // Cada sección muestra su propio skeleton mientras carga.
@@ -236,6 +260,53 @@ export default function Dashboard() {
   return (
     <>
     <div style={{ display: 'flex', flexDirection: 'column', ...(isMobile ? { minHeight: '100%' } : { height: '100%' }) }}>
+      {/* Banner de revisión semanal (domingos) */}
+      {showReviewReminder && (
+        <div
+          onClick={() => navigate('/journal')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: isMobile ? '0.75rem 1rem' : '0.875rem 1.5rem',
+            backgroundColor: 'rgba(245, 158, 11, 0.08)',
+            borderBottom: '1px solid rgba(245, 158, 11, 0.25)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+          className="hover:bg-amber-950/20"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+            <AlertTriangle size={18} style={{ color: '#f59e0b', flexShrink: 0 }} />
+            <p
+              style={{
+                fontSize: '0.8125rem',
+                fontWeight: 500,
+                color: 'var(--text-primary)',
+                margin: 0,
+                lineHeight: 1.4,
+              }}
+            >
+              Tenés <span style={{ color: '#f59e0b', fontWeight: 700 }}>{weeklyPendingPostMortems.length}</span> {weeklyPendingPostMortems.length === 1 ? 'operación' : 'operaciones'} sin post-mortem esta semana
+            </p>
+          </div>
+          <span
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: '#f59e0b',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              fontFamily: '"Syne", sans-serif',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Revisar ahora →
+          </span>
+        </div>
+      )}
+
       {/* Portfolio Summary */}
       {isLoading || !account ? (
         <SkeletonSummary />

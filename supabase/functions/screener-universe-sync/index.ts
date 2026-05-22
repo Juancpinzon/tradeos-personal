@@ -78,43 +78,77 @@ Deno.serve(async (req) => {
     console.log(`[Sync] Filtered to ${filteredAssets.length} active tradeable assets (US Exchanges)`)
     const alpacaSymbols = filteredAssets.map((a: any) => a.symbol)
 
-    // ── Step 1b: Fetch Market Capitalizations from FMP in Batches ──────────
-    let marketCaps = new Map<string, number>()
-    if (fmpKey) {
-      marketCaps = await fetchAllFmpMarketCaps(alpacaSymbols, fmpKey)
-      console.log(`[Sync] Fetched market capitalizations for ${marketCaps.size} symbols from FMP`)
-    } else {
-      console.warn("[Sync] FMP_API_KEY not configured. Cannot fetch market capitalizations.")
-    }
-
-    // Filter assets to only those with market cap > 500M
-    const finalAssets = filteredAssets.filter((a: any) => {
-      const cap = marketCaps.get(a.symbol.toUpperCase())
-      return cap != null && cap > 500000000
-    })
-
-    console.log(`[Sync] Filtered to ${finalAssets.length} symbols with market cap > 500M`)
-    const finalSymbols = finalAssets.map((a: any) => a.symbol)
-
-    // ── Step 1c: Fetch Pricing/Quotes from Alpaca Snapshots in Batches ─────
-    let snapshots: Record<string, any> = {}
-    if (finalSymbols.length > 0) {
-      snapshots = await fetchAllAlpacaSnapshots(finalSymbols, alpacaKey!, alpacaSecret!)
-      console.log(`[Sync] Fetched Alpaca pricing snapshots for ${Object.keys(snapshots).length} symbols`)
-    }
-
-    // ── Step 1d: Map to Database Rows ──────────────────────────────────────────
-    const syncedAt = new Date().toISOString()
-
-    // Query existing fundamentals cache early so we can use its data
-    const { data: existingFunds } = await supabase
+    // ── Step 1b: Query existing fundamentals cache early for smart cache reuse ──
+    console.log("[Sync] Step 1b: Querying existing fundamentals cache...")
+    const { data: existingFunds, error: fundsQueryErr } = await supabase
       .from("fundamentals_cache")
-      .select("symbol, fetched_at, revenue_growth_pct, eps_next_estimate")
+      .select("symbol, fetched_at, revenue_growth_pct, eps_next_estimate, market_cap")
+
+    if (fundsQueryErr) {
+      console.error("[Sync] Error querying fundamentals_cache:", fundsQueryErr)
+    }
 
     const existingFundsMap = new Map<string, any>(
       (existingFunds ?? []).map((r: any) => [r.symbol.toUpperCase(), r])
     )
 
+    // ── Step 1c: Fetch Pricing/Quotes from Alpaca Snapshots for ALL US standard assets ──
+    console.log("[Sync] Step 1c: Fetching pricing snapshots from Alpaca...")
+    const snapshots = await fetchAllAlpacaSnapshots(alpacaSymbols, alpacaKey!, alpacaSecret!)
+    console.log(`[Sync] Fetched Alpaca pricing snapshots for ${Object.keys(snapshots).length} symbols`)
+
+    // Filter to active, liquid assets first to minimize FMP API footprint
+    const liquidAssets = filteredAssets.filter((a: any) => {
+      const sym = a.symbol.toUpperCase()
+      const snap = snapshots[sym]
+      const price = snap?.latestTrade?.p ?? snap?.dailyBar?.c ?? snap?.prevDailyBar?.c ?? null
+      const volume = snap?.dailyBar?.v ?? snap?.latestTrade?.s ?? 0
+      // Filter out penny stocks (< $2) and illiquid assets (< 150,000 volume) to avoid FMP API overload
+      return price != null && price >= 2.0 && volume >= 150000
+    })
+    console.log(`[Sync] Filtered to ${liquidAssets.length} active liquid assets (price >= $2.0, volume >= 150,000)`)
+    const liquidSymbols = liquidAssets.map((a: any) => a.symbol)
+
+    // ── Step 1d: Fetch Market Capitalizations from FMP ────────────────────────
+    const marketCaps = new Map<string, number>()
+    // Seed with already cached market caps
+    for (const row of existingFunds ?? []) {
+      if (row.symbol && row.market_cap != null) {
+        marketCaps.set(row.symbol.toUpperCase(), row.market_cap)
+      }
+    }
+
+    // Only query FMP for symbols missing in cache or stale (> 7 days)
+    const nowTime = Date.now()
+    const STALE_CAP_TTL = 7 * 24 * 60 * 60 * 1000 // 7 days
+    const symbolsNeedingCap = liquidSymbols.filter(sym => {
+      const cached = existingFundsMap.get(sym.toUpperCase())
+      if (!cached || cached.market_cap == null) return true
+      const fetchedTime = new Date(cached.fetched_at || 0).getTime()
+      return nowTime - fetchedTime > STALE_CAP_TTL
+    })
+
+    console.log(`[Sync] ${symbolsNeedingCap.length} symbols need FMP market cap refresh out of ${liquidSymbols.length} liquid symbols`)
+
+    if (fmpKey && symbolsNeedingCap.length > 0) {
+      const newCaps = await fetchAllFmpMarketCaps(symbolsNeedingCap, fmpKey)
+      console.log(`[Sync] Fetched ${newCaps.size} market capitalizations from FMP`)
+      for (const [sym, cap] of newCaps.entries()) {
+        marketCaps.set(sym, cap)
+      }
+    } else if (!fmpKey) {
+      console.warn("[Sync] FMP_API_KEY not configured. Using cached market caps only.")
+    }
+
+    // Filter liquid assets to those with market cap > 500M
+    const finalAssets = liquidAssets.filter((a: any) => {
+      const cap = marketCaps.get(a.symbol.toUpperCase())
+      return cap != null && cap > 500000000
+    })
+    console.log(`[Sync] Filtered to ${finalAssets.length} symbols with market cap > 500M`)
+
+    // ── Step 1e: Map to Database Rows ──────────────────────────────────────────
+    const syncedAt = new Date().toISOString()
     const universeRows: any[] = []
     const marketDataRows: any[] = []
 
@@ -123,7 +157,6 @@ Deno.serve(async (req) => {
       const cap = marketCaps.get(sym) ?? 0
       const snap = snapshots[sym]
 
-      // Extract price from Alpaca snapshot
       const price = snap?.latestTrade?.p ?? snap?.dailyBar?.c ?? snap?.prevDailyBar?.c ?? null
       if (price == null || price <= 0) continue
 
@@ -134,7 +167,6 @@ Deno.serve(async (req) => {
       const w52l = snap?.dailyBar?.l ?? price
       const athDistance = w52h > 0 ? ((price - w52h) / w52h) * 100 : 0
 
-      // Get cached fundamentals to keep screener_universe sync'd
       const cachedFund = existingFundsMap.get(sym)
       const revenueGrowth = cachedFund?.revenue_growth_pct ?? null
       const epsNextEst = cachedFund?.eps_next_estimate ?? null
@@ -233,17 +265,21 @@ Deno.serve(async (req) => {
     }
 
     // Purge stale tickers from screener_universe (not updated in current run)
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-    console.log(`[Sync] Purging stale tickers from screener_universe (synced_at < ${oneHourAgo})...`)
-    const { error: purgeError, count: purgedCount } = await supabase
-      .from("screener_universe")
-      .delete({ count: "exact" })
-      .lt("synced_at", oneHourAgo)
+    if (universeRows.length > 0) {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      console.log(`[Sync] Purging stale tickers from screener_universe (synced_at < ${oneHourAgo})...`)
+      const { error: purgeError, count: purgedCount } = await supabase
+        .from("screener_universe")
+        .delete({ count: "exact" })
+        .lt("synced_at", oneHourAgo)
 
-    if (purgeError) {
-      console.error("[Sync] Error purging stale tickers:", purgeError)
+      if (purgeError) {
+        console.error("[Sync] Error purging stale tickers:", purgeError)
+      } else {
+        console.log(`[Sync] Purged ${purgedCount ?? 0} stale tickers from screener_universe`)
+      }
     } else {
-      console.log(`[Sync] Purged ${purgedCount ?? 0} stale tickers from screener_universe`)
+      console.warn("[Sync] No assets were synced in this run. Skipping purge step to prevent wiping out database.")
     }
 
     // ── Step 2: Find symbols needing fundamentals refresh ─────────────────────
@@ -432,13 +468,14 @@ async function fetchAllFmpMarketCaps(symbols: string[], fmpKey: string): Promise
           }
         }
       } else {
-        console.error(`[Sync/FmpCap] FMP batch ${i} returned status: ${res.status}`)
+        const bodyText = await res.text().catch(() => "")
+        console.error(`[Sync/FmpCap] FMP batch ${i} returned status: ${res.status} | body: ${bodyText}`)
       }
     } catch (err) {
       console.error(`[Sync/FmpCap] Error fetching FMP batch ${i}:`, err)
     }
-    // Respect FMP free plan rate limit (typically 10-30 requests per minute or similar)
-    await new Promise((r) => setTimeout(r, 80))
+    // Respect FMP rate limit (1200ms delay between batches)
+    await new Promise((r) => setTimeout(r, 1200))
   }
   return marketCaps
 }
@@ -508,200 +545,6 @@ async function fetchRobustFundamentals(
   avKey: string | null,
   fmpBase: string
 ): Promise<FundamentalsPayload | null> {
-  const staticFundamentals: Record<string, FundamentalsPayload> = {
-    AAPL: {
-      eps_current: 6.6,
-      eps_next_estimate: 7.2,
-      eps_growth_next_pct: 9.1,
-      revenue_growth_pct: 8.5,
-      pe_ratio: 30.5,
-      next_earnings_date: "2026-07-28",
-      next_earnings_estimate_eps: 7.2,
-      price: 224.5,
-      market_cap: 3450000000000,
-      week_52_high: 240.0,
-      week_52_low: 165.0,
-      price_change_pct_1d: 0.45,
-      volume: 45000000,
-      name: "Apple Inc.",
-    },
-    MSFT: {
-      eps_current: 11.8,
-      eps_next_estimate: 13.2,
-      eps_growth_next_pct: 11.8,
-      revenue_growth_pct: 14.2,
-      pe_ratio: 34.1,
-      next_earnings_date: "2026-07-25",
-      next_earnings_estimate_eps: 13.2,
-      price: 422.8,
-      market_cap: 3150000000000,
-      week_52_high: 470.0,
-      week_52_low: 380.0,
-      price_change_pct_1d: -0.12,
-      volume: 18000000,
-      name: "Microsoft Corporation",
-    },
-    NVDA: {
-      eps_current: 2.8,
-      eps_next_estimate: 4.1,
-      eps_growth_next_pct: 46.4,
-      revenue_growth_pct: 48.5,
-      pe_ratio: 42.8,
-      next_earnings_date: "2026-08-18",
-      next_earnings_estimate_eps: 4.1,
-      price: 121.2,
-      market_cap: 2980000000000,
-      week_52_high: 150.0,
-      week_52_low: 75.0,
-      price_change_pct_1d: 1.25,
-      volume: 120000000,
-      name: "NVIDIA Corporation",
-    },
-    GOOGL: {
-      eps_current: 7.5,
-      eps_next_estimate: 8.6,
-      eps_growth_next_pct: 14.6,
-      revenue_growth_pct: 13.8,
-      pe_ratio: 21.4,
-      next_earnings_date: "2026-07-23",
-      next_earnings_estimate_eps: 8.6,
-      price: 173.5,
-      market_cap: 2180000000000,
-      week_52_high: 195.0,
-      week_52_low: 130.0,
-      price_change_pct_1d: 0.82,
-      volume: 24000000,
-      name: "Alphabet Inc.",
-    },
-    AMZN: {
-      eps_current: 4.9,
-      eps_next_estimate: 6.2,
-      eps_growth_next_pct: 26.5,
-      revenue_growth_pct: 11.5,
-      pe_ratio: 38.6,
-      next_earnings_date: "2026-08-02",
-      next_earnings_estimate_eps: 6.2,
-      price: 188.2,
-      market_cap: 1950000000000,
-      week_52_high: 220.0,
-      week_52_low: 145.0,
-      price_change_pct_1d: -0.34,
-      volume: 32000000,
-      name: "Amazon.com, Inc.",
-    },
-    META: {
-      eps_current: 22.0,
-      eps_next_estimate: 25.5,
-      eps_growth_next_pct: 15.9,
-      revenue_growth_pct: 19.4,
-      pe_ratio: 24.2,
-      next_earnings_date: "2026-07-30",
-      next_earnings_estimate_eps: 25.5,
-      price: 512.5,
-      market_cap: 1300000000000,
-      week_52_high: 600.0,
-      week_52_low: 420.0,
-      price_change_pct_1d: 1.65,
-      volume: 15000000,
-      name: "Meta Platforms, Inc.",
-    },
-    TSLA: {
-      eps_current: 2.4,
-      eps_next_estimate: 3.1,
-      eps_growth_next_pct: 29.1,
-      revenue_growth_pct: 12.5,
-      pe_ratio: 74.8,
-      next_earnings_date: "2026-07-22",
-      next_earnings_estimate_eps: 3.1,
-      price: 184.5,
-      market_cap: 580000000000,
-      week_52_high: 270.0,
-      week_52_low: 138.0,
-      price_change_pct_1d: -2.45,
-      volume: 85000000,
-      name: "Tesla, Inc.",
-    },
-    PLTR: {
-      eps_current: 0.35,
-      eps_next_estimate: 0.48,
-      eps_growth_next_pct: 37.1,
-      revenue_growth_pct: 28.5,
-      pe_ratio: 88.5,
-      next_earnings_date: "2026-08-05",
-      next_earnings_estimate_eps: 0.48,
-      price: 41.2,
-      market_cap: 92000000000,
-      week_52_high: 65.0,
-      week_52_low: 20.0,
-      price_change_pct_1d: 3.42,
-      volume: 48000000,
-      name: "Palantir Technologies Inc.",
-    },
-    NFLX: {
-      eps_current: 19.5,
-      eps_next_estimate: 23.0,
-      eps_growth_next_pct: 17.9,
-      revenue_growth_pct: 15.2,
-      pe_ratio: 32.4,
-      next_earnings_date: "2026-07-16",
-      next_earnings_estimate_eps: 23.0,
-      price: 642.5,
-      market_cap: 285000000000,
-      week_52_high: 800.0,
-      week_52_low: 550.0,
-      price_change_pct_1d: 0.22,
-      volume: 3500000,
-      name: "Netflix, Inc.",
-    },
-    AMD: {
-      eps_current: 1.8,
-      eps_next_estimate: 3.5,
-      eps_growth_next_pct: 94.4,
-      revenue_growth_pct: 12.8,
-      pe_ratio: 45.2,
-      next_earnings_date: "2026-07-29",
-      next_earnings_estimate_eps: 3.5,
-      price: 155.4,
-      market_cap: 250000000000,
-      week_52_high: 230.0,
-      week_52_low: 135.0,
-      price_change_pct_1d: 1.15,
-      volume: 52000000,
-      name: "Advanced Micro Devices, Inc.",
-    },
-    AVGO: {
-      eps_current: 4.15,
-      eps_next_estimate: 5.25,
-      eps_growth_next_pct: 26.5,
-      revenue_growth_pct: 22.4,
-      pe_ratio: 31.8,
-      next_earnings_date: "2026-08-31",
-      next_earnings_estimate_eps: 5.25,
-      price: 168.5,
-      market_cap: 780000000000,
-      week_52_high: 185.0,
-      week_52_low: 120.0,
-      price_change_pct_1d: 0.65,
-      volume: 22000000,
-      name: "Broadcom Inc.",
-    },
-    QCOM: {
-      eps_current: 9.8,
-      eps_next_estimate: 11.2,
-      eps_growth_next_pct: 14.3,
-      revenue_growth_pct: 11.8,
-      pe_ratio: 18.5,
-      next_earnings_date: "2026-07-31",
-      next_earnings_estimate_eps: 11.2,
-      price: 182.4,
-      market_cap: 205000000000,
-      week_52_high: 230.0,
-      week_52_low: 150.0,
-      price_change_pct_1d: -0.15,
-      volume: 8000000,
-      name: "QUALCOMM Incorporated",
-    }
-  };
 
   // 1. Try FMP (if key is present)
   if (fmpKey) {
@@ -772,12 +615,7 @@ async function fetchRobustFundamentals(
   const yPayload = await fetchYahooFundamentals(symbol)
   if (yPayload && yPayload.revenue_growth_pct != null) return yPayload
 
-  // 4. Try high-fidelity static fallback
-  const symUpper = symbol.toUpperCase()
-  if (staticFundamentals[symUpper]) {
-    console.log(`[Sync/Fallback] Using high-fidelity static fallback for ${symUpper}`)
-    return staticFundamentals[symUpper]
-  }
+  // (static fallback try block removed)
 
   // If Yahoo succeeded but returned null for revenue growth, return it anyway rather than returning absolute null
   if (yPayload) return yPayload

@@ -28,6 +28,14 @@ interface ComputedStats {
   closed:           number
   totalEntries:     number
   avgConfidence:    number
+  intradayWinRate:      number
+  intradayWins:         number
+  intradayLosses:       number
+  intradayProfitFactor: number
+  swingWinRate:         number
+  swingWins:            number
+  swingLosses:          number
+  swingProfitFactor:    number
 }
 
 function computeStats(entries: JournalEntry[]): ComputedStats {
@@ -56,6 +64,30 @@ function computeStats(entries: JournalEntry[]): ComputedStats {
     ? (withOutcome.filter(e => e.followed_plan).length / withOutcome.length) * 100
     : 0
 
+  // Intraday specific stats
+  const intradayClosed = closed.filter(e => e.trade_type === 'intraday')
+  const intradayWins = intradayClosed.filter(e => e.outcome === 'win')
+  const intradayLosses = intradayClosed.filter(e => e.outcome === 'loss')
+  const intradayWinRate = intradayClosed.length > 0 ? (intradayWins.length / intradayClosed.length) * 100 : 0
+  
+  const intradayTotalWinAmount  = intradayWins.reduce((s, e) => s + (e.actual_pnl ?? 0), 0)
+  const intradayTotalLossAmount = intradayLosses.reduce((s, e) => s + Math.abs(e.actual_pnl ?? 0), 0)
+  const intradayProfitFactor    = intradayTotalLossAmount > 0
+    ? intradayTotalWinAmount / intradayTotalLossAmount
+    : intradayWins.length > 0 ? 99 : 0
+
+  // Swing specific stats
+  const swingClosed = closed.filter(e => e.trade_type === 'swing')
+  const swingWins = swingClosed.filter(e => e.outcome === 'win')
+  const swingLosses = swingClosed.filter(e => e.outcome === 'loss')
+  const swingWinRate = swingClosed.length > 0 ? (swingWins.length / swingClosed.length) * 100 : 0
+  
+  const swingTotalWinAmount  = swingWins.reduce((s, e) => s + (e.actual_pnl ?? 0), 0)
+  const swingTotalLossAmount = swingLosses.reduce((s, e) => s + Math.abs(e.actual_pnl ?? 0), 0)
+  const swingProfitFactor    = swingTotalLossAmount > 0
+    ? swingTotalWinAmount / swingTotalLossAmount
+    : swingWins.length > 0 ? 99 : 0
+
   // Tag más frecuente en losses
   const tagCounts: Record<string, number> = {}
   losses.forEach(e => (e.tags ?? []).forEach(t => {
@@ -80,6 +112,14 @@ function computeStats(entries: JournalEntry[]): ComputedStats {
     closed:         closed.length,
     totalEntries:   entries.length,
     avgConfidence,
+    intradayWinRate,
+    intradayWins:         intradayWins.length,
+    intradayLosses:       intradayLosses.length,
+    intradayProfitFactor,
+    swingWinRate,
+    swingWins:            swingWins.length,
+    swingLosses:          swingLosses.length,
+    swingProfitFactor,
   }
 }
 
@@ -136,6 +176,22 @@ export default function JournalStats({ entries }: JournalStatsProps) {
           <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: '0.375rem' }}>
             {s.wins}W · {s.losses}L · {s.breakevens}B
           </p>
+
+          {/* Separación por trade_type */}
+          <div style={{ marginTop: '0.75rem', paddingTop: '0.625rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+              <span style={{ color: '#3b82f6', fontWeight: 500 }}>Intraday</span>
+              <span className="font-mono" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {s.intradayWinRate.toFixed(0)}% <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>({s.intradayWins}W-{s.intradayLosses}L)</span>
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+              <span style={{ color: '#a855f7', fontWeight: 500 }}>Swing</span>
+              <span className="font-mono" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {s.swingWinRate.toFixed(0)}% <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>({s.swingWins}W-{s.swingLosses}L)</span>
+              </span>
+            </div>
+          </div>
         </StatCard>
 
         {/* Profit Factor */}
@@ -157,6 +213,22 @@ export default function JournalStats({ entries }: JournalStatsProps) {
           <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: '0.375rem' }}>
             Ganancia bruta / pérdida bruta
           </p>
+
+          {/* Separación por trade_type */}
+          <div style={{ marginTop: '0.75rem', paddingTop: '0.625rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+              <span style={{ color: '#3b82f6', fontWeight: 500 }}>Intraday</span>
+              <span className="font-mono" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {s.intradayProfitFactor >= 99 ? '∞' : s.intradayProfitFactor.toFixed(2)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+              <span style={{ color: '#a855f7', fontWeight: 500 }}>Swing</span>
+              <span className="font-mono" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {s.swingProfitFactor >= 99 ? '∞' : s.swingProfitFactor.toFixed(2)}
+              </span>
+            </div>
+          </div>
         </StatCard>
       </div>
 
