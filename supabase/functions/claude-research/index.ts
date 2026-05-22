@@ -11,10 +11,16 @@ import Anthropic from "npm:@anthropic-ai/sdk";
 const ALPACA_BASE = "https://data.alpaca.markets";
 const ALPACA_TRADE = "https://paper-api.alpaca.markets";
 
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 function errJson(message: string, status = 400) {
   return new Response(JSON.stringify({ error: message }), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS },
   });
 }
 
@@ -22,293 +28,292 @@ function errJson(message: string, status = 400) {
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
+    return new Response(null, { headers: CORS });
+  }
+
+  try {
+    // ── JWT validation ──────────────────────────────────────────────────────────
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return errJson("Missing Authorization header", 401);
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseSvc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const alpacaKey = Deno.env.get("ALPACA_API_KEY");
+    const alpacaSecret = Deno.env.get("ALPACA_SECRET_KEY");
+    const avKey = Deno.env.get("ALPHA_VANTAGE_KEY"); // fallback técnico
+
+    if (!anthropicKey) return errJson("ANTHROPIC_API_KEY not configured", 500);
+
+    // Auth client — ANON_KEY + global.headers (ES256-compatible)
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser();
+    if (authError || !user) return errJson("Unauthorized", 401);
+
+    // DB client — SERVICE_ROLE_KEY for all database operations (bypass RLS)
+    const supabase = createClient(supabaseUrl, supabaseSvc);
+
+    // ── Parse body ──────────────────────────────────────────────────────────────
+    let body: { symbol?: string; query?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return errJson("Invalid JSON body");
+    }
+
+    const { symbol, query } = body;
+    if (!symbol || !query) return errJson("symbol and query are required");
+
+    const sym = symbol.toUpperCase();
+
+    // ── Fetch en paralelo ───────────────────────────────────────────────────────
+    const alpacaHeaders: Record<string, string> =
+      alpacaKey && alpacaSecret
+        ? { "APCA-API-KEY-ID": alpacaKey, "APCA-API-SECRET-KEY": alpacaSecret }
+        : {};
+    const now = new Date();
+    const from = new Date(now);
+    from.setMonth(from.getMonth() - 14);
+    const fromStr = from.toISOString().split("T")[0];
+    const toStr = now.toISOString().split("T")[0];
+
+    const [
+      barsResult,
+      fmpResult,
+      positionResult,
+      portfolioResult,
+      accountResult,
+      quoteResult,
+    ] = await Promise.allSettled([
+      // Técnicos (Alpaca) — si no responde, usamos AV como fallback
+      fetch(
+        `${supabaseUrl}/functions/v1/alpaca-proxy/bars/${sym}?timeframe=1Week&limit=60`,
+        {
+          headers: { Authorization: authHeader },
+        },
+      ).then((r) => r.json()),
+
+      // Fundamentales (FMP Proxy → AV fallback interno)
+      fetch(`${supabaseUrl}/functions/v1/fmp-proxy/fundamentals/${sym}`, {
+        headers: { Authorization: authHeader },
+      })
+        .then((r) => r.json())
+        .catch(() => null),
+
+      // Posición del usuario
+      supabase
+        .from("positions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("symbol", sym)
+        .maybeSingle(),
+
+      // Datos portafolio (cache DB)
+      supabase
+        .from("portfolios")
+        .select("total_equity")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+
+      // Fresh equity (Alpaca)
+      fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/account`, {
+        headers: { Authorization: authHeader },
+      })
+        .then((r) => r.json())
+        .catch(() => null),
+
+      // Fresh quote (Alpaca fallback)
+      fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/quote/${sym}`, {
+        headers: { Authorization: authHeader },
+      })
+        .then((r) => r.json())
+        .catch(() => null),
+    ]);
+
+    const barsResultData =
+      barsResult.status === "fulfilled" ? barsResult.value : null;
+    let bars: Bar[] = barsResultData?.bars || [];
+
+    // ── Fallback técnico con Alpha Vantage cuando Alpaca no tiene barras suficientes ────────────
+
+    const fmpData =
+      fmpResult.status === "fulfilled" ? fmpResult.value?.data : null;
+    const yahooData = null;
+
+    const position =
+      positionResult.status === "fulfilled" ? positionResult.value.data : null;
+
+    const portfolioData =
+      portfolioResult.status === "fulfilled" ? portfolioResult.value.data : null;
+
+    const accountData =
+      accountResult.status === "fulfilled" ? accountResult.value : null;
+    const quoteData =
+      quoteResult.status === "fulfilled" ? quoteResult.value : null;
+
+    // Usar equity fresco si está disponible
+    const totalEquity = accountData?.equity ?? portfolioData?.total_equity ?? 0;
+
+    // Precio fresco de Alpaca si FMP falla
+    const alpacaPrice =
+      quoteData?.price ?? (bars.length ? bars[bars.length - 1]?.c : null);
+
+    // RSI: Yahoo no da RSI directamente, así que usamos el calculado desde las barras (Alpaca/AV)
+    const rsiFromBars =
+      bars.length >= 15
+        ? calculateRSI(
+            bars.map((b: Bar) => b.c),
+            14,
+          )
+        : null;
+    const rsiWeekly = yahooData?.rsi_14 ?? rsiFromBars;
+    const rsiSource =
+      yahooData?.rsi_14 != null ? "yahoo" : rsiFromBars != null ? "bars" : null;
+
+    // Precio y ATH — prioridad: FMP > Yahoo > Alpaca > barras
+    const price = fmpData?.price ?? yahooData?.price ?? alpacaPrice;
+    const week52High =
+      fmpData?.week_52_high ??
+      yahooData?.week_52_high ??
+      (bars.length ? Math.max(...bars.map((b: Bar) => b.h)) : 0);
+    const week52Low =
+      fmpData?.week_52_low ??
+      yahooData?.week_52_low ??
+      (bars.length ? Math.min(...bars.map((b: Bar) => b.l)) : 0);
+    const athDist =
+      week52High > 0 && price ? ((price - week52High) / week52High) * 100 : null;
+    const volume =
+      fmpData?.volume ??
+      yahooData?.volume ??
+      (bars.length ? bars[bars.length - 1]?.v : null);
+    const volumeAvg30 = bars.length
+      ? bars.slice(-30).reduce((s: number, b: Bar) => s + b.v, 0) /
+        Math.min(bars.length, 30)
+      : null;
+
+    // ── Construir snapshots ─────────────────────────────────────────────────────
+    const dataSnapshot = {
+      price,
+      price_change_pct_1d:
+        fmpData?.price_change_pct_1d ?? yahooData?.price_change_pct_1d ?? null,
+      volume,
+      volume_avg_30d: volumeAvg30,
+      market_cap: fmpData?.market_cap ?? yahooData?.market_cap ?? null,
+      week_52_high: week52High,
+      week_52_low: week52Low,
+      ath_distance_pct: athDist,
+      rsi_weekly: rsiWeekly,
+      rsi_source: rsiSource,
+      eps_current: fmpData?.eps_current ?? yahooData?.eps_current ?? null,
+      eps_next_estimate:
+        fmpData?.eps_next_estimate ?? yahooData?.eps_next_estimate ?? null,
+      eps_growth_next_pct:
+        fmpData?.eps_growth_next_pct ?? yahooData?.eps_growth_next_pct ?? null,
+      revenue_growth_pct:
+        fmpData?.revenue_growth_pct ?? yahooData?.revenue_growth_pct ?? null,
+      pe_ratio: fmpData?.pe_ratio ?? yahooData?.pe_ratio ?? null,
+      next_earnings_date:
+        fmpData?.next_earnings_date ?? yahooData?.next_earnings_date ?? null,
+      name: fmpData?.name ?? yahooData?.name ?? sym,
+      fetched_at: new Date().toISOString(),
+    };
+
+    const currentPrice = price ?? position?.current_price ?? 0;
+    const marketValue = (position?.qty ?? 0) * currentPrice;
+    const weightPct =
+      totalEquity && totalEquity > 0
+        ? (marketValue / totalEquity) * 100
+        : (position?.portfolio_weight_pct ?? 0);
+
+    const portfolioCtx = {
+      has_position: !!position,
+      qty: position?.qty,
+      avg_entry_price: position?.avg_entry_price,
+      current_price: currentPrice,
+      unrealized_pnl: position?.unrealized_pnl,
+      unrealized_pnl_pct: position?.unrealized_pnl_pct,
+      portfolio_weight_pct: weightPct,
+      total_portfolio_equity: totalEquity,
+    };
+
+    // ── Construir prompt ────────────────────────────────────────────────────────
+    const dataCtx = buildDataContext(sym, dataSnapshot, portfolioCtx, now);
+    const systemPrompt = buildSystemPrompt();
+
+    // ── Llamar Claude con streaming ─────────────────────────────────────────────
+    const anthropic = new Anthropic({ apiKey: anthropicKey });
+
+    const stream = await anthropic.messages.stream({
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: `${dataCtx}\n\nPregunta: ${query}` }],
+    });
+
+    // ── Streaming response al cliente ───────────────────────────────────────────
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+
+    let fullAnalysis = "";
+
+    (async () => {
+      try {
+        // ── Enviar metadatos como primer chunk ──────────────────────────────────
+        const metadataChunk = JSON.stringify({
+          type: "metadata",
+          dataSnapshot,
+          portfolioCtx,
+        });
+        await writer.write(encoder.encode(metadataChunk + "--METADATA_END--"));
+
+        for await (const chunk of stream) {
+          if (
+            chunk.type === "content_block_delta" &&
+            chunk.delta.type === "text_delta"
+          ) {
+            const text = chunk.delta.text;
+            fullAnalysis += text;
+            await writer.write(encoder.encode(text));
+          }
+        }
+
+        // Al completarse, guardar en research_entries
+        await supabase.from("research_entries").insert({
+          user_id: user.id,
+          symbol: sym,
+          query,
+          analysis: fullAnalysis,
+          data_used: dataSnapshot,
+          portfolio_context: portfolioCtx,
+          model: "claude-3-5-sonnet-20241022",
+        });
+      } catch (e) {
+        console.error("Streaming error:", e);
+      } finally {
+        await writer.close();
+      }
+    })();
+
+    return new Response(readable, {
       headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, content-type",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "X-Content-Type-Options": "nosniff",
       },
     });
+  } catch (e) {
+    console.error("[Research Global Error]:", e);
+    return errJson(e instanceof Error ? e.message : String(e), 500);
   }
-
-  // ── JWT validation ──────────────────────────────────────────────────────────
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return errJson("Missing Authorization header", 401);
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const supabaseSvc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-  const alpacaKey = Deno.env.get("ALPACA_API_KEY");
-  const alpacaSecret = Deno.env.get("ALPACA_SECRET_KEY");
-  const avKey = Deno.env.get("ALPHA_VANTAGE_KEY"); // fallback técnico
-
-  if (!anthropicKey) return errJson("ANTHROPIC_API_KEY not configured", 500);
-
-  // Auth client — ANON_KEY + global.headers (ES256-compatible)
-  const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabaseAuth.auth.getUser();
-  if (authError || !user) return errJson("Unauthorized", 401);
-
-  // DB client — SERVICE_ROLE_KEY for all database operations (bypass RLS)
-  const supabase = createClient(supabaseUrl, supabaseSvc);
-
-  // ── Parse body ──────────────────────────────────────────────────────────────
-  let body: { symbol?: string; query?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return errJson("Invalid JSON body");
-  }
-
-  const { symbol, query } = body;
-  if (!symbol || !query) return errJson("symbol and query are required");
-
-  const sym = symbol.toUpperCase();
-
-  // ── Fetch en paralelo ───────────────────────────────────────────────────────
-  const alpacaHeaders: Record<string, string> =
-    alpacaKey && alpacaSecret
-      ? { "APCA-API-KEY-ID": alpacaKey, "APCA-API-SECRET-KEY": alpacaSecret }
-      : {};
-  const now = new Date();
-  const from = new Date(now);
-  from.setMonth(from.getMonth() - 14);
-  const fromStr = from.toISOString().split("T")[0];
-  const toStr = now.toISOString().split("T")[0];
-
-  const [
-    barsResult,
-    fmpResult,
-    positionResult,
-    portfolioResult,
-    accountResult,
-    quoteResult,
-  ] = await Promise.allSettled([
-    // Técnicos (Alpaca) — si no responde, usamos AV como fallback
-    fetch(
-      `${supabaseUrl}/functions/v1/alpaca-proxy/bars/${sym}?timeframe=1Week&limit=60`,
-      {
-        headers: { Authorization: authHeader },
-      },
-    ).then((r) => r.json()),
-
-    // Fundamentales (FMP Proxy → AV fallback interno)
-    fetch(`${supabaseUrl}/functions/v1/fmp-proxy/fundamentals/${sym}`, {
-      headers: { Authorization: authHeader },
-    })
-      .then((r) => r.json())
-      .catch(() => null),
-
-    // Posición del usuario
-    supabase
-      .from("positions")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("symbol", sym)
-      .maybeSingle(),
-
-    // Datos portafolio (cache DB)
-    supabase
-      .from("portfolios")
-      .select("total_equity")
-      .eq("user_id", user.id)
-      .maybeSingle(),
-
-    // Fresh equity (Alpaca)
-    fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/account`, {
-      headers: { Authorization: authHeader },
-    })
-      .then((r) => r.json())
-      .catch(() => null),
-
-    // Fresh quote (Alpaca fallback)
-    fetch(`${supabaseUrl}/functions/v1/alpaca-proxy/quote/${sym}`, {
-      headers: { Authorization: authHeader },
-    })
-      .then((r) => r.json())
-      .catch(() => null),
-  ]);
-
-  const barsResultData =
-    barsResult.status === "fulfilled" ? barsResult.value : null;
-  let bars: Bar[] = barsResultData?.bars || [];
-
-  // ── Fallback técnico con Alpha Vantage cuando Alpaca no tiene barras suficientes ────────────
-
-  const fmpData =
-    fmpResult.status === "fulfilled" ? fmpResult.value?.data : null;
-  const yahooData = null;
-
-  const position =
-    positionResult.status === "fulfilled" ? positionResult.value.data : null;
-
-  const portfolioData =
-    portfolioResult.status === "fulfilled" ? portfolioResult.value.data : null;
-
-  const accountData =
-    accountResult.status === "fulfilled" ? accountResult.value : null;
-  const quoteData =
-    quoteResult.status === "fulfilled" ? quoteResult.value : null;
-
-  // Usar equity fresco si está disponible
-  const totalEquity = accountData?.equity ?? portfolioData?.total_equity ?? 0;
-
-  // Precio fresco de Alpaca si FMP falla
-  const alpacaPrice =
-    quoteData?.price ?? (bars.length ? bars[bars.length - 1]?.c : null);
-
-  // RSI: Yahoo no da RSI directamente, así que usamos el calculado desde las barras (Alpaca/AV)
-  const rsiFromBars =
-    bars.length >= 15
-      ? calculateRSI(
-          bars.map((b: Bar) => b.c),
-          14,
-        )
-      : null;
-  const rsiWeekly = yahooData?.rsi_14 ?? rsiFromBars;
-  const rsiSource =
-    yahooData?.rsi_14 != null ? "yahoo" : rsiFromBars != null ? "bars" : null;
-
-  // Precio y ATH — prioridad: FMP > Yahoo > Alpaca > barras
-  const price = fmpData?.price ?? yahooData?.price ?? alpacaPrice;
-  const week52High =
-    fmpData?.week_52_high ??
-    yahooData?.week_52_high ??
-    (bars.length ? Math.max(...bars.map((b: Bar) => b.h)) : 0);
-  const week52Low =
-    fmpData?.week_52_low ??
-    yahooData?.week_52_low ??
-    (bars.length ? Math.min(...bars.map((b: Bar) => b.l)) : 0);
-  const athDist =
-    week52High > 0 && price ? ((price - week52High) / week52High) * 100 : null;
-  const volume =
-    fmpData?.volume ??
-    yahooData?.volume ??
-    (bars.length ? bars[bars.length - 1]?.v : null);
-  const volumeAvg30 = bars.length
-    ? bars.slice(-30).reduce((s: number, b: Bar) => s + b.v, 0) /
-      Math.min(bars.length, 30)
-    : null;
-
-  // ── Construir snapshots ─────────────────────────────────────────────────────
-  const dataSnapshot = {
-    price,
-    price_change_pct_1d:
-      fmpData?.price_change_pct_1d ?? yahooData?.price_change_pct_1d ?? null,
-    volume,
-    volume_avg_30d: volumeAvg30,
-    market_cap: fmpData?.market_cap ?? yahooData?.market_cap ?? null,
-    week_52_high: week52High,
-    week_52_low: week52Low,
-    ath_distance_pct: athDist,
-    rsi_weekly: rsiWeekly,
-    rsi_source: rsiSource,
-    eps_current: fmpData?.eps_current ?? yahooData?.eps_current ?? null,
-    eps_next_estimate:
-      fmpData?.eps_next_estimate ?? yahooData?.eps_next_estimate ?? null,
-    eps_growth_next_pct:
-      fmpData?.eps_growth_next_pct ?? yahooData?.eps_growth_next_pct ?? null,
-    revenue_growth_pct:
-      fmpData?.revenue_growth_pct ?? yahooData?.revenue_growth_pct ?? null,
-    pe_ratio: fmpData?.pe_ratio ?? yahooData?.pe_ratio ?? null,
-    next_earnings_date:
-      fmpData?.next_earnings_date ?? yahooData?.next_earnings_date ?? null,
-    name: fmpData?.name ?? yahooData?.name ?? sym,
-    fetched_at: new Date().toISOString(),
-  };
-
-  const currentPrice = price ?? position?.current_price ?? 0;
-  const marketValue = (position?.qty ?? 0) * currentPrice;
-  const weightPct =
-    totalEquity && totalEquity > 0
-      ? (marketValue / totalEquity) * 100
-      : (position?.portfolio_weight_pct ?? 0);
-
-  const portfolioCtx = {
-    has_position: !!position,
-    qty: position?.qty,
-    avg_entry_price: position?.avg_entry_price,
-    current_price: currentPrice,
-    unrealized_pnl: position?.unrealized_pnl,
-    unrealized_pnl_pct: position?.unrealized_pnl_pct,
-    portfolio_weight_pct: weightPct,
-    total_portfolio_equity: totalEquity,
-  };
-
-  // ── Construir prompt ────────────────────────────────────────────────────────
-  const dataCtx = buildDataContext(sym, dataSnapshot, portfolioCtx, now);
-  const systemPrompt = buildSystemPrompt();
-
-  // ── Llamar Claude con streaming ─────────────────────────────────────────────
-  const anthropic = new Anthropic({ apiKey: anthropicKey });
-
-  const stream = await anthropic.messages.stream({
-    model: "claude-3-5-sonnet-20241022",
-    max_tokens: 2000,
-    system: systemPrompt,
-    messages: [{ role: "user", content: `${dataCtx}\n\nPregunta: ${query}` }],
-  });
-
-  // ── Streaming response al cliente ───────────────────────────────────────────
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-  const encoder = new TextEncoder();
-
-  let fullAnalysis = "";
-
-  (async () => {
-    try {
-      // ── Enviar metadatos como primer chunk ──────────────────────────────────
-      const metadataChunk = JSON.stringify({
-        type: "metadata",
-        dataSnapshot,
-        portfolioCtx,
-      });
-      await writer.write(encoder.encode(metadataChunk + "--METADATA_END--"));
-
-      for await (const chunk of stream) {
-        if (
-          chunk.type === "content_block_delta" &&
-          chunk.delta.type === "text_delta"
-        ) {
-          const text = chunk.delta.text;
-          fullAnalysis += text;
-          await writer.write(encoder.encode(text));
-        }
-      }
-
-      // Al completarse, guardar en research_entries
-      await supabase.from("research_entries").insert({
-        user_id: user.id,
-        symbol: sym,
-        query,
-        analysis: fullAnalysis,
-        data_used: dataSnapshot,
-        portfolio_context: portfolioCtx,
-        model: "claude-3-5-sonnet-20241022",
-      });
-    } catch (e) {
-      console.error("Streaming error:", e);
-    } finally {
-      await writer.close();
-    }
-  })();
-
-  return new Response(readable, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Transfer-Encoding": "chunked",
-      "Access-Control-Allow-Origin": "*",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

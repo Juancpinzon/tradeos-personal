@@ -30,27 +30,27 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders() });
   }
 
-  const supabaseUrl   = Deno.env.get("SUPABASE_URL")!;
-  const supabaseAnon  = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const supabaseSvc   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anthropicKey  = Deno.env.get("ANTHROPIC_API_KEY");
-
-  if (!anthropicKey) return errJson("ANTHROPIC_API_KEY not configured", 500);
-
-  // ── JWT validation ──────────────────────────────────────────────────────────
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return errJson("Missing Authorization", 401);
-
-  const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const { data: { user }, error: authErr } = await supabaseAuth.auth.getUser();
-  if (authErr || !user) return errJson("Unauthorized", 401);
-
-  const adminClient = createClient(supabaseUrl, supabaseSvc);
-
   try {
+    const supabaseUrl   = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnon  = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseSvc   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anthropicKey  = Deno.env.get("ANTHROPIC_API_KEY");
+
+    if (!anthropicKey) return errJson("ANTHROPIC_API_KEY not configured", 500);
+
+    // ── JWT validation ──────────────────────────────────────────────────────────
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return errJson("Missing Authorization", 401);
+
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authErr } = await supabaseAuth.auth.getUser();
+    if (authErr || !user) return errJson("Unauthorized", 401);
+
+    const adminClient = createClient(supabaseUrl, supabaseSvc);
+
     // ── a) Leer posiciones del usuario ───────────────────────────────────────
     const { data: positions, error: posErr } = await adminClient
       .from("positions")
@@ -240,6 +240,6 @@ Devolvé exactamente este schema JSON:
     });
   } catch (e) {
     console.error("claude-portfolio-doctor error:", e);
-    return errJson("Internal server error", 500);
+    return errJson(e instanceof Error ? e.message : String(e), 500);
   }
 });
