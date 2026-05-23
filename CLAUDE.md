@@ -47,7 +47,7 @@ TradeOS Personal es una plataforma de inversiones y trading unificada para un us
 | Broker Cripto | Binance API | Spot trading cripto |
 | Fundamentales | Financial Modeling Prep (FMP) API | EPS, revenue growth, guidance, P/E, earnings calendar |
 | Análisis IA | Claude API (claude-sonnet-4-5) | Research Agent, Screener, Portfolio Doctor |
-| Charts | Recharts + TradingView Widget (embed) | Equity chart histórico + OHLCV por símbolo |
+| Charts | lightweight-charts v5 + Recharts | Charts OHLCV nativos con indicadores (Research + Trading) + EquityChart (Recharts, se mantiene) |
 | Estado | Zustand | Estado global liviano |
 | Fetching | TanStack Query (React Query) | Cache, refetch, loading states |
 | Build | Vite | Dev rápido |
@@ -1155,3 +1155,16 @@ Nuevo ítem en Sidebar entre Journal y Screener: 📋 Plan de Vuelo → /flight-
 - [x] **Diario Inteligente**: El formulario de diario `JournalForm` precarga inteligentemente el `trade_type` desde la orden vinculada o el plan de vuelo. Se presenta en un estado "locked" de lectura premium para asegurar la coherencia del flujo de trabajo, con una opción elegante de "Cambiar" para desbloquear y sobreescribir de forma manual.
 - [x] **Estadísticas de Diario Robustas**: Mantenimiento y separación exacta en `JournalStats` del win rate y profit factor por tipo de operación (`intraday` vs `swing`), y badges estilizados en `JournalList`.
 - [x] **Validación de Código y Compilación**: Tipado estricto propagado a través de todas las interfaces clave en `src/types/index.ts` y compilación Vite exitosa sin errores de typecheck.
+
+---
+
+## 🚀 Fase 13: Chart Nativo con Indicadores Técnicos [COMPLETADA]
+
+- [x] **Reemplazo de TradingView embed**: Se sustituyó el antiguo iframe embed de TradingView por un chart nativo con `lightweight-charts` v5 de alto rendimiento.
+- [x] **Indicadores Client-Side**: Librería en TS puro para el cálculo dinámico de EMA (20/50/200), RSI (14) Wilder, MACD (12/26/9), ATR (14) y volumen coloreado según la vela.
+- [x] **Datos Crypto (Binance WS)**: WebSocket público a `stream.binance.com` con carga inicial vía API REST, reconexión automática y backoff exponencial (sin API keys públicas expuestas).
+- [x] **Datos Equity (Alpaca Bars)**: Peticiones a Alpaca para barras históricas (`/bars`) a través de la Edge Function `alpaca-proxy` existente, con actualización de datos en vivo en el cliente mediante polling.
+- [x] **Integración en Research**: Selector de timeframe e indicadores toggles nativos e interactivos en la vista de búsqueda de activos.
+- [x] **Integración en Trading**: Split horizontal (40% Order Entry, 60% Chart nativo) y líneas de precios referenciales (Stop Loss y Target) dibujadas e interactuadas reactivamente desde el formulario de órdenes.
+- [x] **Zustand tradingStore**: Sincronización robusta en tiempo real de los campos clave del formulario (`symbol`, `stopLossPrice`, `targetPrice`, `entryPrice`) con el gráfico nativo.
+

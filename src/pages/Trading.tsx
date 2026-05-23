@@ -6,7 +6,7 @@
 // Símbolo seleccionado en watchlist → precarga en OrderForm
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Clock } from 'lucide-react'
 import OrderForm from '../components/trading/OrderForm'
@@ -16,15 +16,35 @@ import { WatchlistPanel } from '../components/watchlist/WatchlistPanel'
 import { useOrders } from '../hooks/useOrders'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useWatchlist } from '../hooks/useWatchlist'
-import type { OrderDraft } from '../components/trading/OrderForm'
-import type { UserSettings } from '../types'
-
 import { useSettings } from '../hooks/useSettings'
 import { useFlightPlan } from '../hooks/useFlightPlan'
+import { useTradingStore } from '../stores/tradingStore'
+import { ChartContainer } from '../components/chart/ChartContainer'
+import type { OrderDraft } from '../components/trading/OrderForm'
+import type { UserSettings } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trading page principal
 // ─────────────────────────────────────────────────────────────────────────────
+
+function inferBroker(symbol: string): 'binance' | 'alpaca' {
+  const s = symbol.toUpperCase().trim();
+  const isCrypto = 
+    s.includes('/') || 
+    s.endsWith('USDT') || 
+    s.endsWith('BTC') || 
+    s.endsWith('ETH') || 
+    s.endsWith('SOL') ||
+    s.endsWith('BNB') ||
+    s.endsWith('XRP') ||
+    s.endsWith('ADA') ||
+    s.endsWith('DOGE') ||
+    s.endsWith('AVAX') ||
+    s.endsWith('DOT') ||
+    s.endsWith('LINK');
+    
+  return isCrypto ? 'binance' : 'alpaca';
+}
 
 export default function Trading() {
   const [searchParams] = useSearchParams()
@@ -39,6 +59,22 @@ export default function Trading() {
   const { items: watchlistItems } = useWatchlist()
   const { data: settings } = useSettings()
   const { plan } = useFlightPlan()
+
+  // Zustand Store
+  const { 
+    symbol: activeSymbol, 
+    setSymbol, 
+    stopLossPrice, 
+    targetPrice,
+    setEntryPrice
+  } = useTradingStore()
+
+  // Sync de URL param symbol a tradingStore
+  useEffect(() => {
+    if (selectedSymbol) {
+      setSymbol(selectedSymbol);
+    }
+  }, [selectedSymbol, setSymbol])
 
   const userSettings: UserSettings = settings || {
     id: 'loading',
@@ -58,6 +94,20 @@ export default function Trading() {
   )
   const currentPrice = selectedWatchItem?.marketData?.price ?? null
 
+  // Precio actual del símbolo activo en el store
+  const activeWatchItem = useMemo(() => 
+    watchlistItems.find(w => w.symbol === activeSymbol),
+    [watchlistItems, activeSymbol]
+  )
+  const activePrice = activeWatchItem?.marketData?.price ?? currentPrice ?? null
+
+  // Sync del precio activo como entryPrice al store
+  useEffect(() => {
+    if (activePrice !== null) {
+      setEntryPrice(activePrice);
+    }
+  }, [activePrice, setEntryPrice])
+
   // Posición actual del símbolo
   const currentPosition = positions.find(p => p.symbol === selectedSymbol)
   const portfolioWeightAtOrder = currentPosition?.portfolio_weight_pct ?? null
@@ -66,7 +116,7 @@ export default function Trading() {
   const suggestedTradeType = useMemo(() => {
     if (!pendingDraft || !plan) return null
     const candidate = plan.candidates?.find(
-      c => c.symbol.toUpperCase() === pendingDraft.symbol.toUpperCase()
+      (c: any) => c.symbol.toUpperCase() === pendingDraft.symbol.toUpperCase()
     )
     return candidate?.trade_type ?? null
   }, [pendingDraft, plan])
@@ -84,19 +134,19 @@ export default function Trading() {
 
     try {
       // Calcular risk snapshot para guardar junto a la orden
-      const entryPrice = pendingDraft.estimated_price ?? pendingDraft.limit_price ?? 0
+      const entryPriceVal = pendingDraft.estimated_price ?? pendingDraft.limit_price ?? 0
       const stopLoss   = pendingDraft.stop_loss ?? 0
       const stopDist   = pendingDraft.side === 'buy'
-        ? entryPrice - stopLoss
-        : stopLoss - entryPrice
+        ? entryPriceVal - stopLoss
+        : stopLoss - entryPriceVal
 
       const riskAmount = stopDist > 0 ? pendingDraft.qty * stopDist : undefined
 
       let rrRatio: number | undefined
       if (pendingDraft.target && stopDist > 0) {
         const reward = pendingDraft.side === 'buy'
-          ? pendingDraft.target - entryPrice
-          : entryPrice - pendingDraft.target
+          ? pendingDraft.target - entryPriceVal
+          : entryPriceVal - pendingDraft.target
         if (reward > 0) rrRatio = reward / stopDist
       }
 
@@ -133,11 +183,13 @@ export default function Trading() {
     setSubmitError(null)
   }, [])
 
+  const activeBroker = useMemo(() => inferBroker(activeSymbol), [activeSymbol])
+
   return (
     <div className="trading-page">
 
-      {/* Columna izquierda — Order form */}
-      <div className="trading-col trading-col--left">
+      {/* Columna izquierda — 40% ancho — Order entry + Watchlist */}
+      <div className="trading-col trading-col--left" style={{ display: 'flex', flexDirection: 'column', height: '105%', overflow: 'hidden' }}>
 
         {/* Header de la columna */}
         <div className="trading-col__header">
@@ -173,8 +225,8 @@ export default function Trading() {
           </div>
         )}
 
-        {/* Order form */}
-        <div className="trading-col__body">
+        {/* Order form y Watchlist Panel */}
+        <div className="trading-col__body" style={{ flex: 1, overflowY: 'auto' }}>
           <OrderForm
             initialSymbol={selectedSymbol}
             currentPrice={currentPrice}
@@ -185,23 +237,51 @@ export default function Trading() {
 
           {/* Hint: seleccionar de watchlist */}
           {!selectedSymbol && (
-            <p className="trading-hint">
+            <p className="trading-hint" style={{ marginTop: '8px' }}>
               <Clock size={11} />
               Seleccioná un símbolo de la watchlist para precargar el precio actual
             </p>
           )}
+          
+          <div className="mt-4 border-t border-gray-800 pt-4" style={{ flex: 1, minHeight: '300px' }}>
+            <div className="flex items-center mb-2 px-1">
+              <span className="text-[10px] font-bold text-gray-500 tracking-wider">TU WATCHLIST</span>
+            </div>
+            <WatchlistPanel />
+          </div>
         </div>
       </div>
 
-      {/* Columna derecha — Watchlist + Order history */}
+      {/* Columna derecha — 60% ancho — Chart nativo + Historial de órdenes */}
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        {/* Watchlist */}
-        <div style={{ height: '50%', borderBottom: '1px solid var(--border-default)' }}>
-          <WatchlistPanel />
+        {/* ChartContainer de lightweight-charts v5 */}
+        <div style={{ flex: '1 1 60%', padding: '14px', borderBottom: '1px solid var(--border-default)', overflow: 'hidden' }}>
+          {activeSymbol ? (
+            <ChartContainer
+              symbol={activeSymbol}
+              broker={activeBroker}
+              stopLossPrice={stopLossPrice}
+              targetPrice={targetPrice}
+              entryPrice={activePrice}
+              height={320}
+              className="h-full"
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 border border-gray-850 rounded-lg bg-surface">
+              <span className="text-4xl mb-3">📈</span>
+              <p className="font-semibold text-sm text-gray-400">Seleccioná un símbolo</p>
+              <p className="text-xs text-gray-600 mt-1.5 max-w-[280px] text-center">
+                Buscá un ticker en el formulario o seleccioná una opción de la watchlist
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Order history */}
-        <div style={{ height: '50%', overflowY: 'auto' }}>
+        <div style={{ flex: '0 0 40%', overflowY: 'auto', padding: '14px' }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-bold text-gray-500 tracking-wider uppercase">Historial de Órdenes</span>
+          </div>
           <OrderHistory
             orders={orders}
             isLoading={ordersLoading}

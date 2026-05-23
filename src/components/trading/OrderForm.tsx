@@ -16,6 +16,7 @@ import {
 import RiskCalculator from "./RiskCalculator";
 import { useSymbolSearch } from "../../hooks/useSymbolSearch";
 import { useFlightPlan } from "../../hooks/useFlightPlan";
+import { useTradingStore } from "../../stores/tradingStore";
 import { formatCurrency, formatPercent } from "../../lib/formatters";
 import type { UserSettings } from "../../types";
 
@@ -65,6 +66,30 @@ export default function OrderForm({
   const [assetClass, setAssetClass] = useState<"equity" | "crypto">("equity");
   const { suggestions, isLoading: isSearching } = useSymbolSearch(symbol);
   const { plan } = useFlightPlan();
+
+  // Zustand Store synchronization
+  const { 
+    setSymbol: setStoreSymbol, 
+    setStopLossPrice, 
+    setTargetPrice 
+  } = useTradingStore();
+
+  // Sync to store when symbol changes locally
+  useEffect(() => {
+    setStoreSymbol(symbol);
+  }, [symbol, setStoreSymbol]);
+
+  // Sync stop loss to store in real time
+  useEffect(() => {
+    const sl = parseFloat(stopLoss);
+    setStopLossPrice(isNaN(sl) || sl <= 0 ? null : sl);
+  }, [stopLoss, setStopLossPrice]);
+
+  // Sync target to store in real time
+  useEffect(() => {
+    const tg = parseFloat(target);
+    setTargetPrice(isNaN(tg) || tg <= 0 ? null : tg);
+  }, [target, setTargetPrice]);
 
   // Sync symbol si cambia desde afuera (watchlist click)
   useEffect(() => {

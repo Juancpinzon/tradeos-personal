@@ -104,6 +104,28 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
+    // ── POST /bars (invoked via Supabase client) ──────────────────────────
+    if (req.method === "POST" && (subPath === "/" || subPath === "/alpaca-proxy" || subPath === "")) {
+      let body: any;
+      try {
+        body = await req.json();
+      } catch {
+        // Fallback or skip if not JSON
+      }
+
+      if (body && body.endpoint === "/bars") {
+        const { symbol, timeframe, limit = 500 } = body.params || {};
+        if (!symbol) return errJson("Symbol requerido");
+
+        const barsUrl = `https://data.alpaca.markets/v2/stocks/${symbol.toUpperCase()}/bars?timeframe=${timeframe}&limit=${limit}&feed=sip`;
+        const res = await fetch(barsUrl, { headers: alpacaHeaders });
+        const data = await res.json();
+        if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
+
+        return jsonResponse(data.bars ?? []);
+      }
+    }
+
     // ── GET /account ──────────────────────────────────────────────────────
     if (req.method === "GET" && subPath === "/account") {
       const res = await fetch(`${baseUrl}/v2/account`, {

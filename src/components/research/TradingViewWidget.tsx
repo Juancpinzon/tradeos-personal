@@ -1,65 +1,45 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // TradingViewWidget.tsx
-// Iframe embed TradingView con tema dark, border-radius 8px, sin borde visible.
-// Altura fija 300px. Sin scroll interno.
+// Reimplementado de forma nativa utilizando ChartContainer (lightweight-charts)
+// Evita iframes externos lentos y provee indicadores client-side.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { ChartContainer } from '../chart/ChartContainer';
+
 interface Props {
-  symbol: string
-  height?: number
+  symbol: string;
+  height?: number;
+}
+
+// Inferencia del broker según la clase de activo del símbolo
+function inferBroker(symbol: string): 'binance' | 'alpaca' {
+  const s = symbol.toUpperCase().trim();
+  const isCrypto = 
+    s.includes('/') || 
+    s.endsWith('USDT') || 
+    s.endsWith('BTC') || 
+    s.endsWith('ETH') || 
+    s.endsWith('SOL') ||
+    s.endsWith('BNB') ||
+    s.endsWith('XRP') ||
+    s.endsWith('ADA') ||
+    s.endsWith('DOGE') ||
+    s.endsWith('AVAX') ||
+    s.endsWith('DOT') ||
+    s.endsWith('LINK');
+    
+  return isCrypto ? 'binance' : 'alpaca';
 }
 
 export function TradingViewWidget({ symbol, height = 300 }: Props) {
-  // TradingView necesita el símbolo con exchange prefix para stocks NYSE/NASDAQ
-  // BTC, ETH etc. usan BINANCE:BTCUSDT
-  const tvSymbol = isCrypto(symbol)
-    ? `BINANCE:${symbol.replace('/', '')}T`
-    : symbol
-
-  const src = [
-    'https://www.tradingview.com/widgetembed/',
-    `?symbol=${encodeURIComponent(tvSymbol)}`,
-    '&interval=D',
-    '&theme=dark',
-    '&style=1',
-    '&locale=es',
-    `&toolbar_bg=${encodeURIComponent('#111827')}`,
-    '&hide_side_toolbar=1',
-    '&hide_legend=0',
-    '&save_image=0',
-    '&withdateranges=1',
-    '&allow_symbol_change=0',
-  ].join('')
-
+  const broker = inferBroker(symbol);
+  
   return (
-    <div
-      style={{
-        borderRadius: '8px',
-        overflow: 'hidden',
-        border: 'none',
-        height: `${height}px`,
-        position: 'relative',
-        background: '#111827',
-      }}
-    >
-      <iframe
-        src={src}
-        title={`${symbol} chart`}
-        width="100%"
-        height={height}
-        style={{
-          border: 'none',
-          display: 'block',
-          overflow: 'hidden',
-        }}
-        scrolling="no"
-        allowFullScreen
-      />
-    </div>
-  )
+    <ChartContainer 
+      symbol={symbol} 
+      broker={broker} 
+      height={height - 24} // Acomodar header/footer de ChartContainer dentro del alto
+    />
+  );
 }
-
-function isCrypto(symbol: string): boolean {
-  const cryptoSymbols = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK']
-  return cryptoSymbols.some(c => symbol.toUpperCase().startsWith(c))
-}
+export default TradingViewWidget;
