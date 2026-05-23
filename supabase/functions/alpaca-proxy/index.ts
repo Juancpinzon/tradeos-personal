@@ -114,10 +114,12 @@ Deno.serve(async (req: Request) => {
       }
 
       if (body && body.endpoint === "/bars") {
-        const { symbol, timeframe, limit = 500 } = body.params || {};
+        const { symbol, timeframe, limit = 500, start, end } = body.params || {};
         if (!symbol) return errJson("Symbol requerido");
 
-        const barsUrl = `https://data.alpaca.markets/v2/stocks/${symbol.toUpperCase()}/bars?timeframe=${timeframe}&limit=${limit}&feed=sip`;
+        let barsUrl = `https://data.alpaca.markets/v2/stocks/${symbol.toUpperCase()}/bars?timeframe=${timeframe}&limit=${limit}&feed=iex`;
+        if (start) barsUrl += `&start=${start}`;
+        if (end) barsUrl += `&end=${end}`;
         const res = await fetch(barsUrl, { headers: alpacaHeaders });
         const data = await res.json();
         if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
