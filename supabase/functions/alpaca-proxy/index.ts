@@ -117,8 +117,10 @@ Deno.serve(async (req: Request) => {
         const { symbol, timeframe, limit = 500, start, end } = body.params || {};
         if (!symbol) return errJson("Symbol requerido");
 
-        let barsUrl = `https://data.alpaca.markets/v2/stocks/${symbol.toUpperCase()}/bars?timeframe=${timeframe}&limit=${limit}&feed=iex`;
-        if (start) barsUrl += `&start=${start}`;
+        const defaultStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const finalStart = start || defaultStart;
+
+        let barsUrl = `https://data.alpaca.markets/v2/stocks/${symbol.toUpperCase()}/bars?timeframe=${timeframe}&limit=${limit}&feed=iex&start=${finalStart}`;
         if (end) barsUrl += `&end=${end}`;
         const res = await fetch(barsUrl, { headers: alpacaHeaders });
         const data = await res.json();
@@ -191,8 +193,10 @@ Deno.serve(async (req: Request) => {
       const start = url.searchParams.get("start");
       const end = url.searchParams.get("end");
 
-      let barsUrl = `https://data.alpaca.markets/v2/stocks/${symbol}/bars?timeframe=${timeframe}&limit=${limit}`;
-      if (start) barsUrl += `&start=${start}`;
+      const defaultStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const finalStart = start || defaultStart;
+
+      let barsUrl = `https://data.alpaca.markets/v2/stocks/${symbol}/bars?timeframe=${timeframe}&limit=${limit}&feed=iex&start=${finalStart}`;
       if (end) barsUrl += `&end=${end}`;
 
       const res = await fetch(barsUrl, { headers: alpacaHeaders });

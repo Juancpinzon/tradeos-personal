@@ -20,8 +20,9 @@ interface UseChartDataReturn {
 }
 
 export function useChartData({ symbol, timeframe, broker }: UseChartDataOptions): UseChartDataReturn {
+  const [debouncedSymbol, setDebouncedSymbol] = useState('');
   const [candles, setCandles] = useState<OHLCV[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastPrice, setLastPrice] = useState<number | null>(null);
   const [change24h, setChange24h] = useState<number | null>(null);
@@ -30,15 +31,37 @@ export function useChartData({ symbol, timeframe, broker }: UseChartDataOptions)
   const wsRef = useRef<BinanceChartWS | null>(null);
   const isMounted = useRef(true);
 
+  // Debounce the symbol input
+  useEffect(() => {
+    const cleanSym = symbol.trim();
+    if (cleanSym.length < 1) {
+      setDebouncedSymbol('');
+      setIsLoading(false);
+      return;
+    }
+
+    if (cleanSym !== debouncedSymbol) {
+      setIsLoading(true);
+    }
+
+    const handler = setTimeout(() => {
+      setDebouncedSymbol(cleanSym);
+    }, 500);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [symbol]);
+
   // Helper to load data
   const loadData = async () => {
-    if (!symbol) return;
+    if (!debouncedSymbol) return;
     setIsLoading(true);
     setError(null);
 
     try {
       if (broker === 'binance') {
-        const data = await fetchBinanceKlines(symbol, timeframe);
+        const data = await fetchBinanceKlines(debouncedSymbol, timeframe);
         if (isMounted.current) {
           setCandles(data);
           if (data.length > 0) {
@@ -47,7 +70,7 @@ export function useChartData({ symbol, timeframe, broker }: UseChartDataOptions)
           }
         }
       } else {
-        const data = await fetchAlpacaBars(symbol, timeframe);
+        const data = await fetchAlpacaBars(debouncedSymbol, timeframe);
         if (isMounted.current) {
           setCandles(data);
           if (data.length > 0) {
@@ -79,12 +102,22 @@ export function useChartData({ symbol, timeframe, broker }: UseChartDataOptions)
   };
 
   useEffect(() => {
+    if (!debouncedSymbol) {
+      setCandles([]);
+      setIsLoading(false);
+      setError(null);
+      setLastPrice(null);
+      setChange24h(null);
+      setChangePct24h(null);
+      return;
+    }
+
     isMounted.current = true;
     void loadData();
 
     // Setup live subscription
     if (broker === 'binance') {
-      console.log(`[useChartData] Suscribiendo a Binance WS para ${symbol} (${timeframe})`);
+      console.log(`[useChartData] Suscribiendo a Binance WS para ${debouncedSymbol} (${timeframe})`);
       
       const callbacks = {
         onKline: (kline: any) => {
@@ -135,15 +168,15 @@ export function useChartData({ symbol, timeframe, broker }: UseChartDataOptions)
         }
       };
 
-      wsRef.current = new BinanceChartWS(symbol, timeframe, callbacks);
+      wsRef.current = new BinanceChartWS(debouncedSymbol, timeframe, callbacks);
       wsRef.current.connect();
     } else {
       // For Alpaca, background polling every 60s
-      console.log(`[useChartData] Iniciando polling cada 60s para Alpaca ${symbol}`);
+      console.log(`[useChartData] Iniciando polling cada 60s para Alpaca ${debouncedSymbol}`);
       const intervalId = setInterval(() => {
         void (async () => {
           try {
-            const data = await fetchAlpacaBars(symbol, timeframe);
+            const data = await fetchAlpacaBars(debouncedSymbol, timeframe);
             if (isMounted.current && data.length > 0) {
               setCandles(data);
               const last = data[data.length - 1]!;
@@ -174,7 +207,7 @@ export function useChartData({ symbol, timeframe, broker }: UseChartDataOptions)
         wsRef.current = null;
       }
     };
-  }, [symbol, timeframe, broker]);
+  }, [debouncedSymbol, timeframe, broker]);
 
   return {
     candles,

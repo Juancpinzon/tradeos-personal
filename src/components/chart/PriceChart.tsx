@@ -5,7 +5,8 @@ import {
   LineSeries, 
   HistogramSeries, 
   LineStyle, 
-  CrosshairMode 
+  CrosshairMode,
+  createTextWatermark
 } from 'lightweight-charts';
 import type { 
   IChartApi, 
@@ -114,6 +115,22 @@ export function PriceChart({
     });
     activeChartsRef.current.push(mainChart);
     chartsToSync.push(mainChart);
+
+    // Add TradingView text watermark to satisfy Apache 2.0 attribution requirement
+    const mainPane = mainChart.panes()[0];
+    if (mainPane) {
+      createTextWatermark(mainPane, {
+        horzAlign: 'left' as const,
+        vertAlign: 'bottom' as const,
+        lines: [
+          {
+            text: 'TradingView',
+            color: 'rgba(255, 255, 255, 0.08)',
+            fontSize: 11,
+          }
+        ]
+      });
+    }
 
     // Candlesticks
     const candlestickSeries = mainChart.addSeries(CandlestickSeries, {

@@ -33,13 +33,34 @@ export async function fetchAlpacaBars(symbol: string, timeframe: string, limit =
     throw new Error(error.message || 'Error al obtener barras de Alpaca');
   }
 
-  if (!Array.isArray(data)) {
-    console.warn('[AlpacaBars] Los datos devueltos no son un array:', data);
+  let finalData = data;
+
+  const isEmpty = !Array.isArray(data) || data.length === 0;
+
+  if (isEmpty && alpacaTimeframe !== '1Day') {
+    console.log(`[AlpacaBars] Bars returned empty or null for ${cleanSymbol}. Falling back to 1Day timeframe.`);
+    const retry = await supabase.functions.invoke('alpaca-proxy', {
+      body: {
+        endpoint: '/bars',
+        params: {
+          symbol: cleanSymbol,
+          timeframe: '1Day',
+          limit: 100
+        }
+      }
+    });
+    if (!retry.error && Array.isArray(retry.data)) {
+      finalData = retry.data;
+    }
+  }
+
+  if (!Array.isArray(finalData)) {
+    console.warn('[AlpacaBars] Los datos devueltos no son un array:', finalData);
     return [];
   }
 
   // Mapear el formato de Alpaca { t, o, h, l, c, v } a nuestro formato OHLCV
-  return data.map((bar: any) => {
+  return finalData.map((bar: any) => {
     const unixTime = Math.floor(new Date(bar.t).getTime() / 1000);
     return {
       time: unixTime,

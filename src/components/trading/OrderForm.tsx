@@ -100,6 +100,14 @@ export default function OrderForm({
     if (!symbol) setCompanyName("");
   }, [symbol]);
 
+  // Reset stop loss and target inputs (and store values) when the symbol changes
+  useEffect(() => {
+    setStopLoss("");
+    setTarget("");
+    setStopLossPrice(null);
+    setTargetPrice(null);
+  }, [symbol, setStopLossPrice, setTargetPrice]);
+
   // Auto-cálculo de stop sugerido cuando cambia qty, precio o dirección
   useEffect(() => {
     const qtyNum = parseFloat(qty);
