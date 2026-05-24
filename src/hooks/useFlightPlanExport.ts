@@ -59,7 +59,7 @@ export function useFlightPlanExport() {
     }
 
     const today = new Date()
-    const dateStr = today.toISOString().split('T')[0]
+    const dateStr = today.toISOString().split('T')[0] ?? ''
 
     const payload: FlightPlanExport = {
       date: dateStr,
