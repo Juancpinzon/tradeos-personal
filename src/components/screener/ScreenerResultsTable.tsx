@@ -59,7 +59,7 @@ export function ScreenerResultsTable({ items }: Props) {
       aiNote: item.ai_note,
       revGrowthPct: item.revenue_growth_pct,
       athDistPct: item.ath_distance_pct,
-      nextEarningsDate: item.next_earnings_date
+      nextEarningsDate: item.next_earnings_date ?? undefined
     }));
     exportCandidates(candidates);
   };
