@@ -351,6 +351,16 @@ Deno.serve(async (req: Request) => {
           alpacaRes.status,
         );
 
+      console.log("[alpaca-proxy] Attempting to insert order into DB:", {
+        user_id: userId,
+        broker_order_id: alpacaOrder.id,
+        symbol: symbol.toUpperCase(),
+        qty,
+        side,
+        order_type,
+        status: mapAlpacaStatus(alpacaOrder.status ?? ""),
+      });
+
       const { data: savedOrder, error: dbError } = await adminClient
         .from("orders")
         .insert({
@@ -377,9 +387,19 @@ Deno.serve(async (req: Request) => {
         .select()
         .single();
 
-      if (dbError) console.error("DB insert error:", dbError);
+      if (dbError) {
+        console.error("[alpaca-proxy] DB insert error details:", {
+          message: dbError.message,
+          code: dbError.code,
+          details: dbError.details,
+          hint: dbError.hint,
+        });
+      } else {
+        console.log("[alpaca-proxy] DB insert successful. Saved order ID:", savedOrder?.id);
+      }
+
       return jsonResponse(
-        { order: savedOrder, alpaca_order: alpacaOrder },
+        { order: savedOrder, alpaca_order: alpacaOrder, db_error: dbError },
         201,
       );
     }

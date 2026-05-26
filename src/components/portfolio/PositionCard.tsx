@@ -172,15 +172,15 @@ export default function PositionCard({ position, earningsEvents = [], compact = 
 
       {/* Fila 2: Qty @ entry · market value · PnL */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span className="font-mono" style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-          {formatQty(position.qty)} @ {formatCurrency(position.avg_entry_price)}
-          {!compact && (
-            <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>
-              · {formatCurrency(position.market_value, 0)}
-            </span>
-          )}
-        </span>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span className="font-mono" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+            {formatQty(position.qty)} {position.qty === 1 ? 'acción' : 'acciones'} @ {formatCurrency(position.avg_entry_price)}
+          </span>
+          <span className="font-mono" style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+            Valor: {formatCurrency(position.market_value)}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
           <span className="font-mono" style={{ fontSize: '0.8125rem', fontWeight: 600, color: pnlColor }}>
             {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
           </span>
