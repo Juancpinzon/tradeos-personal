@@ -101,16 +101,27 @@ async function fetchEquitySnapshots(): Promise<EquitySnapshot[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
+  const since = new Date();
+  since.setDate(since.getDate() - 90);
+
   const { data, error } = await supabase
     .from("equity_snapshots")
     .select("*")
     .eq("user_id", user.id)
     .in("broker", ["alpaca", "total"])
-    .order("snapshot_at", { ascending: true })
-    .limit(90);
+    .gte("snapshot_at", since.toISOString())
+    .order("snapshot_at", { ascending: false })
+    .limit(2000);
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as EquitySnapshot[];
+
+  // Deduplicate to one snapshot per day (keep the latest of each day), then sort ascending for chart
+  const byDay = new Map<string, EquitySnapshot>();
+  for (const row of (data ?? []) as EquitySnapshot[]) {
+    const day = row.snapshot_at.slice(0, 10); // "YYYY-MM-DD"
+    if (!byDay.has(day)) byDay.set(day, row);  // first item = most recent (DESC order)
+  }
+  return Array.from(byDay.values()).reverse(); // ascending for chart
 }
 
 async function fetchSymbolNames(symbols: string[]): Promise<Record<string, string>> {

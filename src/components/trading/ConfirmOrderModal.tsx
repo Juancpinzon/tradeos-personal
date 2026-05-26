@@ -38,6 +38,7 @@ export default function ConfirmOrderModal({
 }: ConfirmOrderModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const [tradeType, setTradeType] = useState<'intraday' | 'swing' | null>(null)
+  const [isLocalSubmitting, setIsLocalSubmitting] = useState(false)
 
   useEffect(() => {
     if (suggestedTradeType) {
@@ -45,14 +46,19 @@ export default function ConfirmOrderModal({
     }
   }, [suggestedTradeType])
 
+  // Reset local submitting when parent signals it's done (e.g. on error, modal stays open)
+  useEffect(() => {
+    if (!isSubmitting) setIsLocalSubmitting(false)
+  }, [isSubmitting])
+
   // Cerrar con Escape
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !isSubmitting) onCancel()
+      if (e.key === 'Escape' && !isSubmitting && !isLocalSubmitting) onCancel()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [isSubmitting, onCancel])
+  }, [isSubmitting, isLocalSubmitting, onCancel])
 
   // Cerrar click fuera del modal
   function handleOverlayClick(e: React.MouseEvent<HTMLDivElement>) {
@@ -311,11 +317,15 @@ export default function ConfirmOrderModal({
           <button
             id="modal-confirm-btn"
             className={`modal-btn ${isBuy ? 'modal-btn--buy' : 'modal-btn--sell'}`}
-            onClick={() => tradeType && onConfirm(tradeType)}
-            disabled={isSubmitting || !tradeType}
+            onClick={() => {
+              if (!tradeType || isLocalSubmitting || isSubmitting) return
+              setIsLocalSubmitting(true)
+              onConfirm(tradeType)
+            }}
+            disabled={isSubmitting || isLocalSubmitting || !tradeType}
             type="button"
           >
-            {isSubmitting ? (
+            {(isSubmitting || isLocalSubmitting) ? (
               <>
                 <span className="modal-spinner" />
                 Enviando...

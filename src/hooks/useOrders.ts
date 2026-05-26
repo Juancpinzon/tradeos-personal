@@ -59,7 +59,7 @@ async function fetchOrders(
     .from("orders")
     .select("*")
     .order("submitted_at", { ascending: false })
-    .limit(100);
+    .limit(500);
 
   if (status === "open") {
     query = query.in("status", [...NON_TERMINAL]);
@@ -123,7 +123,8 @@ export function useOrders(status: "all" | "open" | "closed" = "all") {
   const ordersQuery = useQuery({
     queryKey: ["orders", status],
     queryFn: () => fetchOrders(status),
-    staleTime: 10_000,
+    staleTime: 0,
+    refetchOnMount: true,
     // Poll every 3s while non-terminal orders exist; stop otherwise.
     refetchInterval: (query) => {
       const data = (query.state.data ?? []) as Order[];
