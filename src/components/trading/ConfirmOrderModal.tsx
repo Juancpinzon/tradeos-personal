@@ -31,14 +31,14 @@ export default function ConfirmOrderModal({
   totalEquity,
   portfolioWeightAtOrder,
   userSettings,
-  isSubmitting,
+  isSubmitting: isSubmittingProp,
   onConfirm,
   onCancel,
   suggestedTradeType,
 }: ConfirmOrderModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const [tradeType, setTradeType] = useState<'intraday' | 'swing' | null>(null)
-  const [isLocalSubmitting, setIsLocalSubmitting] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     if (suggestedTradeType) {
@@ -48,21 +48,21 @@ export default function ConfirmOrderModal({
 
   // Reset local submitting when parent signals it's done (e.g. on error, modal stays open)
   useEffect(() => {
-    if (!isSubmitting) setIsLocalSubmitting(false)
-  }, [isSubmitting])
+    if (!isSubmittingProp) setIsSubmitting(false)
+  }, [isSubmittingProp])
 
   // Cerrar con Escape
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !isSubmitting && !isLocalSubmitting) onCancel()
+      if (e.key === 'Escape' && !isSubmittingProp && !isSubmitting) onCancel()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [isSubmitting, isLocalSubmitting, onCancel])
+  }, [isSubmittingProp, isSubmitting, onCancel])
 
   // Cerrar click fuera del modal
   function handleOverlayClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.target === overlayRef.current && !isSubmitting) onCancel()
+    if (e.target === overlayRef.current && !isSubmittingProp && !isSubmitting) onCancel()
   }
 
   // ── Calcular métricas ────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ export default function ConfirmOrderModal({
       aria-modal="true"
       aria-label="Confirmar orden"
     >
-      <div className={`modal-box ${isSubmitting ? 'modal-box--submitting' : ''}`}>
+      <div className={`modal-box ${(isSubmittingProp || isSubmitting) ? 'modal-box--submitting' : ''}`}>
 
         {/* Header */}
         <div className="modal-header">
@@ -128,7 +128,7 @@ export default function ConfirmOrderModal({
           <button
             className="modal-close"
             onClick={onCancel}
-            disabled={isSubmitting}
+            disabled={isSubmittingProp || isSubmitting}
             aria-label="Cancelar"
             type="button"
           >
@@ -309,7 +309,7 @@ export default function ConfirmOrderModal({
             id="modal-cancel-btn"
             className="modal-btn modal-btn--cancel"
             onClick={onCancel}
-            disabled={isSubmitting}
+            disabled={isSubmittingProp || isSubmitting}
             type="button"
           >
             Cancelar
@@ -318,14 +318,14 @@ export default function ConfirmOrderModal({
             id="modal-confirm-btn"
             className={`modal-btn ${isBuy ? 'modal-btn--buy' : 'modal-btn--sell'}`}
             onClick={() => {
-              if (!tradeType || isLocalSubmitting || isSubmitting) return
-              setIsLocalSubmitting(true)
+              if (!tradeType || isSubmitting || isSubmittingProp) return
+              setIsSubmitting(true)
               onConfirm(tradeType)
             }}
-            disabled={isSubmitting || isLocalSubmitting || !tradeType}
+            disabled={isSubmittingProp || isSubmitting || !tradeType}
             type="button"
           >
-            {(isSubmitting || isLocalSubmitting) ? (
+            {(isSubmittingProp || isSubmitting) ? (
               <>
                 <span className="modal-spinner" />
                 Enviando...

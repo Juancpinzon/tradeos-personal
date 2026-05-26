@@ -29,11 +29,11 @@ const EMOTIONAL_STATES: {
   color: string
   bg:    string
 }[] = [
-  { value: 'calm',      label: 'Calm',      color: '#3b82f6', bg: 'rgba(59,130,246,0.12)'  },
-  { value: 'confident', label: 'Confident', color: '#10b981', bg: 'rgba(16,185,129,0.12)'  },
-  { value: 'excited',   label: 'Excited',   color: '#f59e0b', bg: 'rgba(245,158,11,0.12)'  },
-  { value: 'uncertain', label: 'Uncertain', color: '#9ca3af', bg: 'rgba(156,163,175,0.12)' },
-  { value: 'fearful',   label: 'Fearful',   color: '#ef4444', bg: 'rgba(239,68,68,0.12)'   },
+  { value: 'calm',      label: 'Tranquilo',  color: '#3b82f6', bg: 'rgba(59,130,246,0.12)'  },
+  { value: 'confident', label: 'Confiado',   color: '#10b981', bg: 'rgba(16,185,129,0.12)'  },
+  { value: 'excited',   label: 'Emocionado', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)'  },
+  { value: 'uncertain', label: 'Inseguro',   color: '#9ca3af', bg: 'rgba(156,163,175,0.12)' },
+  { value: 'fearful',   label: 'Temeroso',   color: '#ef4444', bg: 'rgba(239,68,68,0.12)'   },
 ]
 
 const SETUP_TYPES: { value: SetupType; label: string }[] = [

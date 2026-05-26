@@ -158,6 +158,7 @@ export function useOrders(status: "all" | "open" | "closed" = "all") {
   const submitMutation = useMutation({
     mutationFn: submitOrderToProxy,
     onSuccess: () => {
+      // Invalidate the "orders" query cache to immediately force a reload of all orders (all, open, closed)
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["portfolio"] });
     },

@@ -102,7 +102,7 @@ async function fetchEquitySnapshots(): Promise<EquitySnapshot[]> {
   if (!user) return [];
 
   const since = new Date();
-  since.setDate(since.getDate() - 90);
+  since.setDate(since.getDate() - 30); // Dynamic range: last 30 days from new Date()
 
   const { data, error } = await supabase
     .from("equity_snapshots")
