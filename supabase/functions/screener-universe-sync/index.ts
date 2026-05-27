@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     const liquidAssets = filteredAssets.filter((a: any) => {
       const sym = a.symbol.toUpperCase()
       const snap = snapshots[sym]
-      const price = snap?.latestTrade?.p ?? snap?.dailyBar?.c ?? snap?.prevDailyBar?.c ?? null
+      const price = snap?.latestTrade?.p ?? snap?.dailyBar?.c ?? null
       const volume = snap?.dailyBar?.v ?? snap?.latestTrade?.s ?? 0
       // Filter out penny stocks (< $2) and illiquid assets (< 150,000 volume) to avoid FMP API overload
       return price != null && price >= 2.0 && volume >= 150000
@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
       const cap = marketCaps.get(sym) ?? 0
       const snap = snapshots[sym]
 
-      const price = snap?.latestTrade?.p ?? snap?.dailyBar?.c ?? snap?.prevDailyBar?.c ?? null
+      const price = snap?.latestTrade?.p ?? snap?.dailyBar?.c ?? null
       if (price == null || price <= 0) continue
 
       const prevClose = snap?.prevDailyBar?.c ?? null
