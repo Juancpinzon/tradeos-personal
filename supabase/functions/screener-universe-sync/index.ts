@@ -42,6 +42,25 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, supabaseSvc)
 
+  // Determine market status once per run (EST timezone)
+  const nowTimeObj = new Date()
+  const estDate = new Date(nowTimeObj.toLocaleString("en-US", { timeZone: "America/New_York" }))
+  const estHours = estDate.getHours()
+  const estMinutes = estDate.getMinutes()
+  const estTimeVal = estHours * 100 + estMinutes
+  const isWeekend = estDate.getDay() === 0 || estDate.getDay() === 6
+  const isBeforeMarket = estTimeVal < 930
+
+  const getAssetPrice = (snap: any) => {
+    if (!snap) return null
+    if (isWeekend || isBeforeMarket) {
+      // Prioritize yesterday's official close before market opens or on weekends
+      return snap.prevDailyBar?.c ?? snap.latestTrade?.p ?? snap.dailyBar?.c ?? null
+    }
+    // Prioritize real-time trade price during market hours and after-hours
+    return snap.latestTrade?.p ?? snap.dailyBar?.c ?? snap.prevDailyBar?.c ?? null
+  }
+
   try {
     // ── Step 1: Fetch assets from Alpaca ──────────────────────────────────────
     console.log("[Sync] Step 1: Fetching assets from Alpaca...")
@@ -101,7 +120,7 @@ Deno.serve(async (req) => {
     const liquidAssets = filteredAssets.filter((a: any) => {
       const sym = a.symbol.toUpperCase()
       const snap = snapshots[sym]
-      const price = snap?.latestTrade?.p ?? snap?.dailyBar?.c ?? null
+      const price = getAssetPrice(snap)
       const volume = snap?.dailyBar?.v ?? snap?.latestTrade?.s ?? 0
       // Filter out penny stocks (< $2) and illiquid assets (< 150,000 volume) to avoid FMP API overload
       return price != null && price >= 2.0 && volume >= 150000
@@ -157,7 +176,7 @@ Deno.serve(async (req) => {
       const cap = marketCaps.get(sym) ?? 0
       const snap = snapshots[sym]
 
-      const price = snap?.latestTrade?.p ?? snap?.dailyBar?.c ?? null
+      const price = getAssetPrice(snap)
       if (price == null || price <= 0) continue
 
       const prevClose = snap?.prevDailyBar?.c ?? null
