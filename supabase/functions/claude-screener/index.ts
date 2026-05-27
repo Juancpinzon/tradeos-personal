@@ -83,24 +83,35 @@ Deno.serve(async (req: Request) => {
 
     if (!anthropicKey) return errJson("ANTHROPIC_API_KEY not configured", 500);
 
-    const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    let user: any = null;
+    const isServiceRole = authHeader === `Bearer ${supabaseSvc}`;
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseAuth.auth.getUser();
-    if (authError || !user) return errJson("Unauthorized", 401);
+    if (!isServiceRole) {
+      const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
+        global: { headers: { Authorization: authHeader } },
+      });
+
+      const {
+        data: { user: authUser },
+        error: authError,
+      } = await supabaseAuth.auth.getUser();
+      if (authError || !authUser) return errJson("Unauthorized", 401);
+      user = authUser;
+    }
 
     const supabase = createClient(supabaseUrl, supabaseSvc);
 
     // deno-lint-ignore no-explicit-any
-    let body: { criteria: any };
+    let body: { criteria: any; user_id?: string };
     try {
       body = await req.json();
     } catch {
       return errJson("Invalid JSON body");
+    }
+
+    if (isServiceRole) {
+      const userId = body.user_id || "88e3e6f6-e08f-4d13-8ec9-29ab0260df0f";
+      user = { id: userId };
     }
 
     const { criteria } = body;
@@ -158,9 +169,7 @@ Deno.serve(async (req: Request) => {
     if (criteria.asset_class && criteria.asset_class !== "both") {
       query = query.eq("asset_class", criteria.asset_class);
     }
-    if (criteria.revenue_growth_min_pct)
-      query = query.gte("revenue_growth_pct", criteria.revenue_growth_min_pct);
-    if (criteria.eps_next_positive) query = query.eq("eps_next_positive", true);
+    // Shifting growth and EPS positive filters to dynamic JavaScript-based filtering layer
 
     const { data: universe, error: universeError } = await query.limit(200);
     if (universeError)
@@ -186,7 +195,7 @@ Deno.serve(async (req: Request) => {
     const totalEvaluated = (universe as UniverseRow[]).length;
     const symbols = (universe as UniverseRow[]).map((u) => u.symbol);
 
-    // ── Step B: Fundamentals cache (read-only — screener-universe-sync popula esto) ──
+    // ── Step B: Fundamentals Cache & On-the-fly Resolution (Top 30 Candidates) ──
     const { data: cachedFunds } = await supabase
       .from("fundamentals_cache")
       .select("*")
@@ -197,55 +206,101 @@ Deno.serve(async (req: Request) => {
         [],
     );
 
-    // Fetch fundamentals for symbols missing week_52_high (sequential, 500ms delay)
-    const toFetch = symbols.filter((sym: string) => {
+    // Sort symbols by market cap descending to prioritize industry leaders
+    const sortedUniverse = [...universe].sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
+    const topCandidates = sortedUniverse.slice(0, 30);
+    const topSymbols = topCandidates.map((c) => c.symbol);
+
+    const now = Date.now();
+    const TTL = 24 * 60 * 60 * 1000;
+
+    // Fetch robust fundamentals on-the-fly for top 30 symbols if missing or stale (>24h)
+    const toFetch = topSymbols.filter((sym: string) => {
       const cached = cacheMap.get(sym);
       if (!cached) return true;
-      if (!cached.week_52_high) return true;
-      return false;
+      if (cached.revenue_growth_pct == null) return true;
+      return now - new Date(cached.fetched_at).getTime() > TTL;
     });
 
-    for (const sym of toFetch.slice(0, 5)) {
+    console.log(`[Screener] Resolving fresh fundamentals on-the-fly for ${toFetch.length} out of 30 top symbols`);
+
+    for (const sym of toFetch) {
       try {
         const res = await fetch(
-          `${supabaseUrl}/functions/v1/fmp-proxy/market-data/${sym}`,
+          `${supabaseUrl}/functions/v1/fmp-proxy/fundamentals/${sym}`,
           { headers: { Authorization: authHeader } },
         );
         if (res.ok) {
-          const { data } = await res.json();
-          if (data) cacheMap.set(sym, data as FundamentalsRow);
+          const body = await res.json();
+          if (body.data) {
+            cacheMap.set(sym, body.data as FundamentalsRow);
+          }
         }
       } catch (e) {
-        console.error(`[B] Error fetching fundamentals for ${sym}:`, e);
+        console.error(`[Screener] Error resolving fundamentals on-the-fly for ${sym}:`, e);
       }
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 100));
     }
 
     console.log(
       "[B] Cache hits:",
       cacheMap.size,
-      "| fetched:",
-      Math.min(toFetch.length, 15),
-      "| still missing:",
-      Math.max(toFetch.length - 15, 0),
+      "| on-the-fly fetched:",
+      toFetch.length,
     );
 
-    // ── Step C: Limitar candidatos para Claude ──────────────────────────────────
-    const candidates = (universe as UniverseRow[])
-      .sort((a, b) => {
-        const aGrowth =
-          cacheMap.get(a.symbol)?.revenue_growth_pct ??
-          a.revenue_growth_pct ??
-          0;
-        const bGrowth =
-          cacheMap.get(b.symbol)?.revenue_growth_pct ??
-          b.revenue_growth_pct ??
-          0;
-        return bGrowth - aGrowth;
-      })
+    // ── Step C: Filter and Sort Candidates in JavaScript ────────────────────────
+    const filteredCandidates = topCandidates.map((c: UniverseRow) => {
+      const f = cacheMap.get(c.symbol);
+      const price = f?.price ?? c.price;
+      const w52h = f?.week_52_high ?? null;
+      const athDistancePct =
+        w52h != null && price != null && w52h > 0
+          ? ((price - w52h) / w52h) * 100
+          : null;
+
+      return {
+        symbol: c.symbol,
+        name: f?.name ?? c.name,
+        price,
+        market_cap: f?.market_cap ?? c.market_cap,
+        revenue_growth_pct: f?.revenue_growth_pct ?? c.revenue_growth_pct ?? null,
+        eps_next_estimate: f?.eps_next_estimate ?? null,
+        pe_ratio: f?.pe_ratio ?? null,
+        next_earnings_date: f?.next_earnings_date ?? null,
+        ath_distance_pct: athDistancePct,
+        rsi_weekly: f?.rsi_weekly ?? null,
+      };
+    }).filter((c) => {
+      // 1. Revenue Growth Filter
+      if (criteria.revenue_growth_min_pct != null) {
+        if (c.revenue_growth_pct == null || c.revenue_growth_pct < criteria.revenue_growth_min_pct) {
+          return false;
+        }
+      }
+      // 2. EPS Next Positive Filter
+      if (criteria.eps_next_positive) {
+        if (c.eps_next_estimate == null || c.eps_next_estimate <= 0) {
+          return false;
+        }
+      }
+      // 3. ATH Distance Max Pct Filter
+      if (criteria.ath_distance_max_pct != null) {
+        if (c.ath_distance_pct == null || c.ath_distance_pct < criteria.ath_distance_max_pct) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const candidates = [...filteredCandidates]
+      .sort((a, b) => (b.revenue_growth_pct || 0) - (a.revenue_growth_pct || 0))
       .slice(0, 15);
+
     console.log(
-      "[C] Candidates:",
+      "[C] JavaScript filtered candidates count:",
+      filteredCandidates.length,
+      "| sending to Claude:",
       candidates.length,
       "| symbols:",
       candidates.map((c) => c.symbol).join(","),
