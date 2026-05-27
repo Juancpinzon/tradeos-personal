@@ -42,22 +42,9 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, supabaseSvc)
 
-  // Determine market status once per run (EST timezone)
-  const nowTimeObj = new Date()
-  const estDate = new Date(nowTimeObj.toLocaleString("en-US", { timeZone: "America/New_York" }))
-  const estHours = estDate.getHours()
-  const estMinutes = estDate.getMinutes()
-  const estTimeVal = estHours * 100 + estMinutes
-  const isWeekend = estDate.getDay() === 0 || estDate.getDay() === 6
-  const isBeforeMarket = estTimeVal < 930
-
   const getAssetPrice = (snap: any) => {
     if (!snap) return null
-    if (isWeekend || isBeforeMarket) {
-      // Prioritize yesterday's official close before market opens or on weekends
-      return snap.prevDailyBar?.c ?? snap.latestTrade?.p ?? snap.dailyBar?.c ?? null
-    }
-    // Prioritize real-time trade price during market hours and after-hours
+    // Prioritize real-time trade first, today's close second, and yesterday's close as fallback
     return snap.latestTrade?.p ?? snap.dailyBar?.c ?? snap.prevDailyBar?.c ?? null
   }
 
