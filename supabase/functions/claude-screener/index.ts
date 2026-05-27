@@ -126,6 +126,21 @@ Deno.serve(async (req: Request) => {
       return errJson("universe_not_synced", 400);
     }
 
+    // Antes de filtrar, verificar si los datos están frescos
+    const staleThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const { count: staleCount } = await supabase
+      .from('screener_universe')
+      .select('*', { count: 'exact', head: true })
+      .lt('synced_at', staleThreshold.toISOString());
+
+    if (staleCount && staleCount > 0) {
+      console.log(`[Screener] Found ${staleCount} stale rows. Triggering screener-universe-sync...`);
+      // Llamar screener-universe-sync antes de continuar
+      await fetch(`${supabaseUrl}/functions/v1/screener-universe-sync`, {
+        headers: { Authorization: `Bearer ${supabaseAnon}` }
+      }).catch(e => console.error("[Screener] Error triggering screener-universe-sync:", e));
+    }
+
     // ── Step A: Query screener_universe ─────────────────────────────────────────
     // deno-lint-ignore no-explicit-any
     let query: any = supabase.from("screener_universe").select("*");
