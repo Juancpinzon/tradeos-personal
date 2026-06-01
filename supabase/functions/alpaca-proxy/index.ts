@@ -184,6 +184,20 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // ── GET /quotes?symbols=AAPL,MSFT ────────────────────────────────────
+    if (req.method === "GET" && subPath === "/quotes") {
+      const symbolsStr = url.searchParams.get("symbols");
+      if (!symbolsStr) return errJson("symbols parameter required");
+
+      const res = await fetch(`https://data.alpaca.markets/v2/stocks/trades/latest?symbols=${symbolsStr.toUpperCase()}`, {
+        headers: alpacaHeaders,
+      });
+      const data = await res.json();
+      if (!res.ok) return errJson(data?.message ?? "Alpaca error", res.status);
+
+      return jsonResponse(data.trades ?? {});
+    }
+
     // ── GET /bars/:symbol?timeframe=1Day&limit=100 ────────────────────────
     if (req.method === "GET" && subPath.startsWith("/bars/")) {
       const symbol = subPath.split("/").pop()?.toUpperCase();

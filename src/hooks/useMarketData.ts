@@ -26,28 +26,34 @@ export function useMarketData(symbols: string[]) {
       // Vamos a usar un endpoint que acepte múltiples símbolos si es posible, 
       // o mapear sobre los existentes.
       
+      // Enviar todos los símbolos en una sola llamada para evitar ERR_CONNECTION_CLOSED
       const results: Record<string, MarketData> = {};
+      const symbolsParam = symbols.map(s => s.replace('/', '')).join(',');
       
-      await Promise.all(symbols.map(async (symbol) => {
-        try {
-          const res = await fetch(`${SUPABASE_URL}/functions/v1/alpaca-proxy/quote/${symbol.replace('/', '')}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            results[symbol] = {
-              symbol,
-              price: data.price,
-              change_pct: data.change_pct || 0,
-              bid: data.bid,
-              ask: data.ask,
+      try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/alpaca-proxy/quotes?symbols=${symbolsParam}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          // data structure is { AAPL: { p: 150, t: ... }, MSFT: { p: ..., t: ... } }
+          for (const symbolKey of Object.keys(data)) {
+            // Re-map symbol back if it was crypto without slash, but Alpaca returns equities mainly
+            const trade = data[symbolKey];
+            results[symbolKey] = {
+              symbol: symbolKey,
+              price: trade.p,
+              change_pct: 0,
               last_updated: new Date().toISOString()
             };
           }
-        } catch (e) {
-          console.error(`Error fetching price for ${symbol}:`, e);
+        } else {
+          console.error("Error fetching bulk quotes:", await res.text());
         }
-      }));
+      } catch (e) {
+        console.error("Network error fetching bulk quotes:", e);
+      }
 
       return results;
     },
