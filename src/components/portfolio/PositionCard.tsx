@@ -174,7 +174,7 @@ export default function PositionCard({ position, earningsEvents = [], compact = 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           <span className="font-mono" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-            {formatQty(position.qty)} {position.qty === 1 ? 'acción' : 'acciones'} @ {formatCurrency(position.avg_entry_price)}
+            {formatQty(position.qty)} acc @ {formatCurrency(position.avg_entry_price)}
           </span>
           <span className="font-mono" style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
             Valor: {formatCurrency(position.market_value)}
@@ -185,13 +185,13 @@ export default function PositionCard({ position, earningsEvents = [], compact = 
             {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
           </span>
           <span className="font-mono" style={{ fontSize: '0.6875rem', color: pnlColor }}>
-            {formatPercent(pnlPct)}
+            {formatPercent(pnlPct)} <span style={{ color: 'var(--text-muted)' }}>• {position.portfolio_weight_pct.toFixed(1)}%</span>
           </span>
         </div>
       </div>
 
       {/* Fila 3: Barra de peso en portafolio */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
         <div
           style={{
             flex: 1,
@@ -211,9 +211,6 @@ export default function PositionCard({ position, earningsEvents = [], compact = 
             }}
           />
         </div>
-        <span className="font-mono" style={{ fontSize: '0.5625rem', color: 'var(--text-muted)', minWidth: '36px', textAlign: 'right' }}>
-          {position.portfolio_weight_pct.toFixed(1)}%
-        </span>
         {nextEarnings && !compact && (
           <span style={{ fontSize: '0.5625rem', color: 'var(--text-muted)', fontFamily: '"IBM Plex Mono", monospace' }}>
             · {nextEarnings.report_time === 'before_market' ? 'BMO' : nextEarnings.report_time === 'after_market' ? 'AMC' : ''}
