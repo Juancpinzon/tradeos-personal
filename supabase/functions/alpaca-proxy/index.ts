@@ -376,7 +376,6 @@ Deno.serve(async (req: Request) => {
           stop_loss_price: stop_loss_price ?? null,
           target_price: target_price ?? null,
           risk_reward_ratio: risk_reward_ratio ?? null,
-          trade_type: trade_type ?? null,
         })
         .select()
         .single();

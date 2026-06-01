@@ -5,14 +5,14 @@
 import { createClient } from "@supabase/supabase-js";
 
 // 1. RELLENA TUS CLAVES AQUÍ:
-const SUPABASE_URL = "hhttps://pzuuovhhubdpbphfwcvw.supabase.co";
+const SUPABASE_URL = "https://pzuuovhhubdpbphfwcvw.supabase.co";
 const SUPABASE_SERVICE_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6dXVvdmhodWJkcGJwaGZ3Y3Z3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2MjQ1MTUsImV4cCI6MjA5NDIwMDUxNX0.ep2FyLEnYKZfNumskai8jbipZSB1hMBW2w4ep6e6Xqs"; // La clave "service_role" (necesaria para saltar RLS)
 
 const ALPACA_API_KEY = "PKUFEDOLWAUWJ56EXI3W3DQ2SY";
 const ALPACA_SECRET_KEY = "QLWTnhAFuZ1miWEBw1c1Ppp44DE8GTkvZ7tcCs5zrCd";
 
-const USER_ID = "T88e3e6f6-e08f-4d13-8ec9-29ab0260df0f"; // El ID de tu usuario en Supabase (lo puedes ver en Auth -> Users)
+const USER_ID = "88e3e6f6-e08f-4d13-8ec9-29ab0260df0f"; // El ID de tu usuario en Supabase (lo puedes ver en Auth -> Users)
 
 const START_DATE = "2026-05-22T00:00:00Z"; // Desde cuando quieres sincronizar
 const END_DATE = "2026-06-01T23:59:59Z"; // Hasta cuando
@@ -113,7 +113,6 @@ async function run() {
       stop_loss_price: null,
       target_price: null,
       risk_reward_ratio: null,
-      trade_type: null,
     };
 
     const { error } = await supabase.from('orders').insert(payload);
