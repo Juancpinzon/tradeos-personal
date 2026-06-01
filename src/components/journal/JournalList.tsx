@@ -35,10 +35,13 @@ function outcomeColor(outcome?: TradeOutcome) {
 const SETUP_LABELS: Record<SetupType, string> = {
   breakout:      'Breakout',
   pullback:      'Pullback',
-  earnings_play: 'Earnings',
+  reversal:      'Reversión',
+  earnings_play: 'Earnings Play',
   swing:         'Swing',
-  reversal:      'Reversal',
-  other:         'Other',
+  momentum:      'Momentum',
+  stage2_breakout: 'Stage 2 Breakout',
+  range:         'Rango',
+  other:         'Otro',
 }
 
 const EMOTIONAL_EMOJIS: Record<string, string> = {
@@ -149,10 +152,13 @@ export default function JournalList({
               <option value="">Todos los setups</option>
               <option value="breakout">Breakout</option>
               <option value="pullback">Pullback</option>
+              <option value="reversal">Reversión</option>
               <option value="earnings_play">Earnings Play</option>
               <option value="swing">Swing</option>
-              <option value="reversal">Reversal</option>
-              <option value="other">Other</option>
+              <option value="momentum">Momentum</option>
+              <option value="stage2_breakout">Stage 2 Breakout</option>
+              <option value="range">Rango</option>
+              <option value="other">Otro</option>
             </select>
             {(filterSymbol || filterOutcome || filterSetup) && (
               <button
