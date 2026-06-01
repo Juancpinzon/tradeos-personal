@@ -44,8 +44,8 @@ Deno.serve(async (req) => {
 
   const getAssetPrice = (snap: any) => {
     if (!snap) return null
-    // Prioritize real-time trade first, today's close second, and yesterday's close as fallback
-    return snap.latestTrade?.p ?? snap.dailyBar?.c ?? snap.prevDailyBar?.c ?? null
+    // Prioritize real-time trade first, and today's close (dailyBar.c) second. Do NOT use previous day's close.
+    return snap.latestTrade?.p ?? snap.dailyBar?.c ?? null
   }
 
   try {
@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
     console.log("[Sync] Step 1b: Querying existing fundamentals cache...")
     const { data: existingFunds, error: fundsQueryErr } = await supabase
       .from("fundamentals_cache")
-      .select("symbol, fetched_at, revenue_growth_pct, eps_next_estimate, market_cap")
+      .select("symbol, fetched_at, revenue_growth_pct, eps_next_estimate, eps_current, market_cap, week_52_high, week_52_low")
 
     if (fundsQueryErr) {
       console.error("[Sync] Error querying fundamentals_cache:", fundsQueryErr)
@@ -169,13 +169,13 @@ Deno.serve(async (req) => {
       const prevClose = snap?.prevDailyBar?.c ?? null
       const changePct = prevClose ? ((price - prevClose) / prevClose) * 100 : 0
       const volume = snap?.dailyBar?.v ?? snap?.latestTrade?.s ?? 0
-      const w52h = snap?.dailyBar?.h ?? price
-      const w52l = snap?.dailyBar?.l ?? price
+      const cachedFund = existingFundsMap.get(sym)
+      const w52h = cachedFund?.week_52_high ?? snap?.dailyBar?.h ?? price
+      const w52l = cachedFund?.week_52_low ?? snap?.dailyBar?.l ?? price
       const athDistance = w52h > 0 ? ((price - w52h) / w52h) * 100 : 0
 
-      const cachedFund = existingFundsMap.get(sym)
       const revenueGrowth = cachedFund?.revenue_growth_pct ?? null
-      const epsNextEst = cachedFund?.eps_next_estimate ?? null
+      const epsNextEst = cachedFund?.eps_next_estimate ?? cachedFund?.eps_current ?? null
       const epsNextPos = epsNextEst != null ? epsNextEst > 0 : null
 
       universeRows.push({

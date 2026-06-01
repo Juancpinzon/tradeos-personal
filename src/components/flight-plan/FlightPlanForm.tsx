@@ -364,39 +364,102 @@ export function FlightPlanForm({
           border-color: var(--color-primary);
         }
 
+        @page {
+          size: A4 landscape;
+          margin: 15mm 20mm 15mm 20mm;
+        }
+
         @media print {
           .no-print, #sidebar-toggle, .fp-summary-teaser, .fp-init__options, .nav-link, aside, header {
             display: none !important;
           }
+          * {
+            font-size: 11px !important;
+            line-height: 1.4 !important;
+          }
           body {
             background: white !important;
             color: black !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           .fp-form {
             max-width: 100% !important;
             padding: 0 !important;
             margin: 0 !important;
+            min-width: 0 !important;
           }
           .fp-form__layout {
+            display: grid !important;
             grid-template-columns: 1fr 1fr !important;
-            gap: 40px !important;
+            gap: 20px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          .fp-form__col {
+            min-width: 0 !important;
+            overflow: hidden !important;
           }
           .fp-section {
-            border: 1px solid #eee !important;
+            border: 1px solid #ddd !important;
             background: white !important;
-            page-break-inside: avoid;
+            page-break-inside: avoid !important;
+            padding: 10px 12px !important;
+            margin-bottom: 10px !important;
+            border-radius: 4px !important;
           }
           .fp-section-title {
+            font-size: 10px !important;
+            font-weight: 700 !important;
             color: #333 !important;
-            border-bottom: 2px solid #333 !important;
+            border-bottom: 1.5px solid #333 !important;
+            margin-bottom: 8px !important;
+            padding-bottom: 4px !important;
           }
+          /* Tabla de contexto: primera columna fija 160px */
+          .fp-context-grid {
+            display: table !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          .fp-context-grid .fp-field {
+            display: table-row !important;
+          }
+          .fp-context-grid .fp-field label {
+            display: table-cell !important;
+            width: 160px !important;
+            min-width: 160px !important;
+            max-width: 160px !important;
+            padding: 4px 8px 4px 0 !important;
+            vertical-align: middle !important;
+            font-weight: 600 !important;
+            color: #555 !important;
+            white-space: nowrap !important;
+          }
+          .fp-context-grid .fp-field input,
+          .fp-context-grid .fp-field select {
+            display: table-cell !important;
+            width: auto !important;
+            padding: 3px 6px !important;
+            border: 1px solid #ccc !important;
+            color: black !important;
+            background: white !important;
+          }
+          .fp-field--full label { color: #555 !important; }
           .fp-field label { color: #666 !important; }
           .fp-field input, .fp-field select, .fp-field textarea {
             border: 1px solid #ccc !important;
             color: black !important;
+            background: white !important;
+            padding: 3px 6px !important;
           }
           .fp-progress-bar-bg { border: 1px solid #ddd !important; }
           .fp-progress-bar-fill { background: #3b82f6 !important; }
+          /* Evitar overflow de texto largo */
+          input, select, textarea, p, span, label {
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+          }
         }
       `}</style>
     </div>

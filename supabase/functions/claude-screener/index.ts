@@ -252,7 +252,7 @@ Deno.serve(async (req: Request) => {
     // ── Step C: Filter and Sort Candidates in JavaScript ────────────────────────
     const filteredCandidates = topCandidates.map((c: UniverseRow) => {
       const f = cacheMap.get(c.symbol);
-      const price = f?.price ?? c.price;
+      const price = c.price ?? f?.price ?? null;
       const w52h = f?.week_52_high ?? null;
       const athDistancePct =
         w52h != null && price != null && w52h > 0
@@ -265,7 +265,7 @@ Deno.serve(async (req: Request) => {
         price,
         market_cap: f?.market_cap ?? c.market_cap,
         revenue_growth_pct: f?.revenue_growth_pct ?? c.revenue_growth_pct ?? null,
-        eps_next_estimate: f?.eps_next_estimate ?? null,
+        eps_next_estimate: f?.eps_next_estimate ?? f?.eps_current ?? null,
         pe_ratio: f?.pe_ratio ?? null,
         next_earnings_date: f?.next_earnings_date ?? null,
         ath_distance_pct: athDistancePct,
