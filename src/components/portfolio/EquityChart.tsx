@@ -57,6 +57,8 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 }
 
 export default function EquityChart({ snapshots }: EquityChartProps) {
+  console.log("EquityChart received snapshots:", snapshots);
+
   if (!snapshots.length) {
     return (
       <div

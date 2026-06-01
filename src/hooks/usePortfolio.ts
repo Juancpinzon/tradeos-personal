@@ -115,6 +115,8 @@ async function fetchEquitySnapshots(): Promise<EquitySnapshot[]> {
 
   if (error) throw new Error(error.message);
 
+  console.log("fetchEquitySnapshots Data:", data);
+
   // Deduplicate to one snapshot per day (keep the latest of each day), then sort ascending for chart
   const byDay = new Map<string, EquitySnapshot>();
   for (const row of (data ?? []) as EquitySnapshot[]) {
