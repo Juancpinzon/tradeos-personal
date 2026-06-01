@@ -27,6 +27,38 @@ function getOrderValue(o: Order): number | null {
   return o.qty * price
 }
 
+function getDateBoundaries(filter: string): { start: Date, end: Date } | null {
+  const now = new Date()
+  if (filter === 'this_week') {
+    const day = now.getDay() || 7
+    const start = new Date(now)
+    start.setDate(now.getDate() - day + 1)
+    start.setHours(0, 0, 0, 0)
+    return { start, end: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999) }
+  }
+  if (filter === 'last_week') {
+    const day = now.getDay() || 7
+    const startThisWeek = new Date(now)
+    startThisWeek.setDate(now.getDate() - day + 1)
+    startThisWeek.setHours(0, 0, 0, 0)
+    const start = new Date(startThisWeek)
+    start.setDate(start.getDate() - 7)
+    const end = new Date(startThisWeek)
+    end.setMilliseconds(end.getMilliseconds() - 1)
+    return { start, end }
+  }
+  if (filter === 'this_month') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1)
+    return { start, end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999) }
+  }
+  if (filter === 'last_month') {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
+    return { start, end }
+  }
+  return null
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // StatusBadge
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,6 +174,7 @@ export default function History() {
   const [filterBroker, setFilterBroker] = useState<string>('all')
   const [filterSide,   setFilterSide]   = useState<string>('all')
   const [filterSource, setFilterSource] = useState<string>('all')
+  const [filterDate,   setFilterDate]   = useState<string>('this_week')
 
   // Sort
   const [sortKey, setSortKey] = useState<SortKey>('submitted_at')
@@ -178,6 +211,15 @@ export default function History() {
       list = list.filter(o => !(o as Order & { imported?: boolean }).imported)
     }
 
+    const bounds = getDateBoundaries(filterDate)
+    if (bounds) {
+      const { start, end } = bounds
+      list = list.filter(o => {
+        const d = new Date(o.submitted_at)
+        return d >= start && d <= end
+      })
+    }
+
     list.sort((a, b) => {
       let cmp = 0
       if (sortKey === 'symbol')       cmp = a.symbol.localeCompare(b.symbol)
@@ -188,7 +230,7 @@ export default function History() {
     })
 
     return list
-  }, [search, filterStatus, filterBroker, filterSide, sortKey, sortDir])
+  }, [search, filterStatus, filterBroker, filterSide, filterSource, filterDate, sortKey, sortDir])
 
   const selectStyle: React.CSSProperties = {
     padding:         '0.4rem 0.75rem',
@@ -306,9 +348,17 @@ export default function History() {
           </select>
 
           <select value={filterSource} onChange={e => setFilterSource(e.target.value)} style={selectStyle}>
-            <option value="all">Mostrar: Todas</option>
+            <option value="all">Origen: Todos</option>
             <option value="executed">Ejecutadas</option>
             <option value="imported">Importadas</option>
+          </select>
+
+          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} style={selectStyle}>
+            <option value="all">Fecha: Todas</option>
+            <option value="this_week">Esta semana</option>
+            <option value="last_week">Semana pasada</option>
+            <option value="this_month">Este mes</option>
+            <option value="last_month">Mes pasado</option>
           </select>
         </div>
 
