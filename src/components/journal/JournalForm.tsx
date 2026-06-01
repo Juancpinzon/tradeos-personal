@@ -39,10 +39,13 @@ const EMOTIONAL_STATES: {
 const SETUP_TYPES: { value: SetupType; label: string }[] = [
   { value: 'breakout',      label: 'Breakout'      },
   { value: 'pullback',      label: 'Pullback'      },
+  { value: 'reversal',      label: 'Reversión'     },
   { value: 'earnings_play', label: 'Earnings Play' },
   { value: 'swing',         label: 'Swing'         },
-  { value: 'reversal',      label: 'Reversal'      },
-  { value: 'other',         label: 'Other'         },
+  { value: 'momentum',      label: 'Momentum'      },
+  { value: 'stage2_breakout', label: 'Stage 2 Breakout' },
+  { value: 'range',         label: 'Rango'         },
+  { value: 'other',         label: 'Otro'          },
 ]
 
 const CONFIDENCE_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981']

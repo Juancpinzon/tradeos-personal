@@ -73,9 +73,13 @@ export function FlightPlanCandidateModal({ onAdd, onClose }: Props) {
               <select value={setup} onChange={e => setSetup(e.target.value)}>
                 <option value="breakout">Breakout</option>
                 <option value="pullback">Pullback</option>
-                <option value="reversal">Reversal</option>
+                <option value="reversal">Reversión</option>
                 <option value="earnings_play">Earnings Play</option>
-                <option value="range">Range</option>
+                <option value="swing">Swing</option>
+                <option value="momentum">Momentum</option>
+                <option value="stage2_breakout">Stage 2 Breakout</option>
+                <option value="range">Rango</option>
+                <option value="other">Otro</option>
               </select>
             </div>
           </div>

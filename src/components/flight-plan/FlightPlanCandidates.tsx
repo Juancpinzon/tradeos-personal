@@ -7,6 +7,18 @@ import { Plus, Trash2, ExternalLink } from 'lucide-react'
 import type { FlightPlanCandidate } from '../../types'
 import { formatCurrency } from '../../lib/formatters'
 
+const SETUP_LABELS: Record<string, string> = {
+  breakout: 'Breakout',
+  pullback: 'Pullback',
+  reversal: 'Reversión',
+  earnings_play: 'Earnings Play',
+  swing: 'Swing',
+  momentum: 'Momentum',
+  stage2_breakout: 'Stage 2 Breakout',
+  range: 'Rango',
+  other: 'Otro'
+}
+
 interface Props {
   candidates: FlightPlanCandidate[]
   onAdd: () => void
@@ -50,7 +62,7 @@ export function FlightPlanCandidates({ candidates, onAdd, onDelete, onNavigateTo
                 <div className="fp-candidate-card__symbol-info">
                   <span className="fp-candidate-card__symbol">{candidate.symbol}</span>
                   <span className="fp-candidate-card__setup">
-                    {candidate.setup_type.toUpperCase()} • {candidate.trade_type.toUpperCase()}
+                    {(SETUP_LABELS[candidate.setup_type] || candidate.setup_type).toUpperCase()} • {candidate.trade_type.toUpperCase()}
                   </span>
                 </div>
                 <div className="fp-candidate-card__actions">

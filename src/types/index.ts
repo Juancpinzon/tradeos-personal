@@ -182,6 +182,9 @@ export type SetupType =
   | "earnings_play"
   | "swing"
   | "reversal"
+  | "momentum"
+  | "stage2_breakout"
+  | "range"
   | "other";
 export type EmotionalState =
   | "calm"
