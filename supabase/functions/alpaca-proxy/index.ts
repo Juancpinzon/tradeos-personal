@@ -344,39 +344,33 @@ Deno.serve(async (req: Request) => {
         headers: alpacaHeaders,
         body: JSON.stringify(alpacaPayload),
       });
-      const alpacaOrder = await alpacaRes.json();
+      const alpacaResponse = await alpacaRes.json();
       if (!alpacaRes.ok)
         return errJson(
-          alpacaOrder?.message ?? `Alpaca error ${alpacaRes.status}`,
+          alpacaResponse?.message ?? `Alpaca error ${alpacaRes.status}`,
           alpacaRes.status,
         );
 
-      console.log("[alpaca-proxy] Attempting to insert order into DB:", {
-        user_id: userId,
-        broker_order_id: alpacaOrder.id,
-        symbol: symbol.toUpperCase(),
-        qty,
-        side,
-        order_type,
-        status: mapAlpacaStatus(alpacaOrder.status ?? ""),
-      });
+      console.log('=== ALPACA ORDER RESPONSE ===', JSON.stringify(alpacaResponse));
 
-      const { data: savedOrder, error: dbError } = await adminClient
-        .from("orders")
+      const { data, error } = await adminClient
+        .from('orders')
         .insert({
           user_id: userId,
-          broker_order_id: alpacaOrder.id,
-          broker: "alpaca",
-          symbol: symbol.toUpperCase(),
-          side,
-          order_type,
-          qty,
-          limit_price: limit_price ?? null,
-          stop_price: stop_price ?? null,
-          status: mapAlpacaStatus(alpacaOrder.status ?? ""),
-          asset_class:
-            alpacaOrder.asset_class === "crypto" ? "crypto" : "equity",
-          submitted_at: alpacaOrder.submitted_at ?? new Date().toISOString(),
+          broker_order_id: alpacaResponse.id,
+          broker: 'alpaca',
+          symbol: alpacaResponse.symbol,
+          side: alpacaResponse.side,
+          order_type: alpacaResponse.type,
+          qty: parseFloat(alpacaResponse.qty),
+          limit_price: alpacaResponse.limit_price ? parseFloat(alpacaResponse.limit_price) : null,
+          stop_price: alpacaResponse.stop_price ? parseFloat(alpacaResponse.stop_price) : null,
+          filled_qty: alpacaResponse.filled_qty ? parseFloat(alpacaResponse.filled_qty) : null,
+          filled_avg_price: alpacaResponse.filled_avg_price ? parseFloat(alpacaResponse.filled_avg_price) : null,
+          status: alpacaResponse.status,
+          asset_class: alpacaResponse.asset_class === 'us_equity' ? 'equity' : 'crypto',
+          submitted_at: alpacaResponse.submitted_at,
+          filled_at: alpacaResponse.filled_at ?? null,
           risk_amount: risk_amount ?? null,
           portfolio_weight_at_order: portfolio_weight_at_order ?? null,
           stop_loss_price: stop_loss_price ?? null,
@@ -387,19 +381,14 @@ Deno.serve(async (req: Request) => {
         .select()
         .single();
 
-      if (dbError) {
-        console.error("[alpaca-proxy] DB insert error details:", {
-          message: dbError.message,
-          code: dbError.code,
-          details: dbError.details,
-          hint: dbError.hint,
-        });
-      } else {
-        console.log("[alpaca-proxy] DB insert successful. Saved order ID:", savedOrder?.id);
+      console.log('=== SUPABASE INSERT RESULT ===', JSON.stringify({ data, error }));
+
+      if (error) {
+        console.error('=== SUPABASE INSERT ERROR ===', error.message, error.code, error.details, error.hint);
       }
 
       return jsonResponse(
-        { order: savedOrder, alpaca_order: alpacaOrder, db_error: dbError },
+        { order: data, alpaca_order: alpacaResponse, db_error: error },
         201,
       );
     }
