@@ -77,6 +77,11 @@ export default function OrderHistory({
 
   async function handleCancel(order: Order) {
     if (!onCancelOrder || !order.broker_order_id) return
+
+    if (!window.confirm(`¿Seguro que deseas cancelar la orden ${order.side.toUpperCase()} ${order.qty} ${order.symbol}?`)) {
+      return
+    }
+
     setCancellingIds(prev => new Set(prev).add(order.id))
     try {
       await onCancelOrder(order.broker_order_id)

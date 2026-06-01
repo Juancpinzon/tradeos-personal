@@ -216,11 +216,17 @@ export default function ConfirmOrderModal({
               </div>
               <div className="modal-risk__grid">
                 <div className="modal-risk__item">
-                  <span className="modal-risk__label">Capital en riesgo</span>
-                  <span className="modal-risk__value font-mono" style={{ color: 'var(--color-loss)' }}>
+                  <span className="modal-risk__label">
+                    {draft.order_type === 'stop' && draft.side === 'sell' ? 'Posición protegida' : 'Capital en riesgo'}
+                  </span>
+                  <span className="modal-risk__value font-mono" style={{ color: draft.order_type === 'stop' && draft.side === 'sell' ? 'var(--color-profit)' : 'var(--color-loss)' }}>
                     {formatCurrency(capitalAtRisk)}
-                    {capitalAtRiskPct !== null && (
-                      <span className="modal-risk__sub">{formatPercent(capitalAtRiskPct, false)} del equity</span>
+                    {draft.order_type === 'stop' && draft.side === 'sell' ? (
+                      <span className="modal-risk__sub">Esta orden protege tu posición existente</span>
+                    ) : (
+                      capitalAtRiskPct !== null && (
+                        <span className="modal-risk__sub">{formatPercent(capitalAtRiskPct, false)} del equity</span>
+                      )
                     )}
                   </span>
                 </div>
