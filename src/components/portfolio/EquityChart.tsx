@@ -6,6 +6,7 @@ import {
   AreaChart,
   Area,
   XAxis,
+  YAxis,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
@@ -104,6 +105,11 @@ export default function EquityChart({ snapshots }: EquityChartProps) {
             <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}    />
           </linearGradient>
         </defs>
+
+        <YAxis 
+          domain={['auto', 'auto']} 
+          hide 
+        />
 
         <XAxis
           dataKey="date"
