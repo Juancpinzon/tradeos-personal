@@ -472,10 +472,17 @@ interface ScreenerResultItem {
 3. `RiskCalculator` calcula automáticamente qty sugerida dado `risk_per_trade_pct`, precio de entrada y stop
 4. Muestra en tiempo real: capital en riesgo ($), % del portafolio, distancia al stop, R/R ratio
 5. Si la posición resultante superaría `max_position_size_pct`, advertencia prominente
-6. Click "Revisar orden" → `ConfirmOrderModal` con resumen completo
+6. Click "Revisar orden" → `ConfirmOrderModal` con resumen completo. Si es orden de VENTA, el riesgo se presenta como "Posición protegida".
 7. Al confirmar → Edge Function `alpaca-proxy` POST `/orders` → orden guardada con snapshot de riesgo
 8. `JournalForm` se abre automáticamente para capturar tesis de entrada
 9. Polling actualiza status; posición actualizada en `positions`
+
+### Flujo 2.1: Cancelar una orden pendiente
+1. Desde `OrderHistory`, usuario clickea Cancelar (visible solo para órdenes `pending` o `accepted`)
+2. Aparece alerta de confirmación (`window.confirm`)
+3. Mutación llama a `alpaca-proxy` con `DELETE /orders/:id`
+4. Proxy solicita cancelación al broker y actualiza DB a `status = 'cancelled'`
+5. React Query invalida caché para actualizar la UI instantáneamente
 
 ### Flujo 3: Research Agent (contexto completo)
 1. Usuario ingresa símbolo o pregunta en `ResearchPanel`
