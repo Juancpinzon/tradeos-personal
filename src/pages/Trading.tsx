@@ -134,20 +134,27 @@ export default function Trading() {
 
     try {
       // Calcular risk snapshot para guardar junto a la orden
-      const entryPriceVal = pendingDraft.estimated_price ?? pendingDraft.limit_price ?? 0
-      const stopLoss   = pendingDraft.stop_loss ?? 0
-      const stopDist   = pendingDraft.side === 'buy'
-        ? entryPriceVal - stopLoss
-        : stopLoss - entryPriceVal
+      const entryPriceVal = pendingDraft.estimated_price ?? pendingDraft.limit_price ?? null
 
-      const riskAmount = stopDist > 0 ? pendingDraft.qty * stopDist : undefined
-
+      let riskAmount: number | undefined
       let rrRatio: number | undefined
-      if (pendingDraft.target && stopDist > 0) {
-        const reward = pendingDraft.side === 'buy'
-          ? pendingDraft.target - entryPriceVal
-          : entryPriceVal - pendingDraft.target
-        if (reward > 0) rrRatio = reward / stopDist
+
+      if (entryPriceVal !== null && entryPriceVal > 0) {
+        const stopLoss   = pendingDraft.stop_loss ?? 0
+        const stopDist   = pendingDraft.side === 'buy'
+          ? entryPriceVal - stopLoss
+          : stopLoss - entryPriceVal
+
+        if (stopDist > 0) {
+          riskAmount = pendingDraft.qty * stopDist
+
+          if (pendingDraft.target) {
+            const reward = pendingDraft.side === 'buy'
+              ? pendingDraft.target - entryPriceVal
+              : entryPriceVal - pendingDraft.target
+            if (reward > 0) rrRatio = reward / stopDist
+          }
+        }
       }
 
       await submitOrder({

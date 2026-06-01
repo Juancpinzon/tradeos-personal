@@ -73,35 +73,41 @@ async function run() {
 
   if (orders.length === 0) return;
 
-  let insertCount = 0;
+  const { data: existingOrders, error: fetchErr } = await supabase
+    .from('orders')
+    .select('broker_order_id')
+    .in('broker_order_id', orders.map(o => o.id));
 
-  for (const alpacaOrder of orders) {
+  if (fetchErr) {
+    console.error('❌ Error obteniendo órdenes existentes en Supabase:', fetchErr);
+    return;
+  }
+
+  const existingIds = new Set(existingOrders.map(o => o.broker_order_id));
+  const newOrders = orders.filter(o => !existingIds.has(o.id));
+
+  console.log(`🔎 Se encontraron ${existingIds.size} órdenes que ya existen en Supabase. Faltan por sincronizar: ${newOrders.length}`);
+  if (newOrders.length === 0) return;
+
+  let insertCount = 0;
+  
+  for (const alpacaOrder of newOrders) {
     const payload = {
       user_id: USER_ID,
       broker_order_id: alpacaOrder.id,
-      broker: "alpaca",
+      broker: 'alpaca',
       symbol: alpacaOrder.symbol,
       side: alpacaOrder.side,
       order_type: alpacaOrder.type,
       qty: parseFloat(alpacaOrder.qty),
-      limit_price: alpacaOrder.limit_price
-        ? parseFloat(alpacaOrder.limit_price)
-        : null,
-      stop_price: alpacaOrder.stop_price
-        ? parseFloat(alpacaOrder.stop_price)
-        : null,
-      filled_qty: alpacaOrder.filled_qty
-        ? parseFloat(alpacaOrder.filled_qty)
-        : null,
-      filled_avg_price: alpacaOrder.filled_avg_price
-        ? parseFloat(alpacaOrder.filled_avg_price)
-        : null,
+      limit_price: alpacaOrder.limit_price ? parseFloat(alpacaOrder.limit_price) : null,
+      stop_price: alpacaOrder.stop_price ? parseFloat(alpacaOrder.stop_price) : null,
+      filled_qty: alpacaOrder.filled_qty ? parseFloat(alpacaOrder.filled_qty) : null,
+      filled_avg_price: alpacaOrder.filled_avg_price ? parseFloat(alpacaOrder.filled_avg_price) : null,
       status: mapAlpacaStatus(alpacaOrder.status ?? ""),
-      asset_class:
-        alpacaOrder.asset_class === "us_equity" ? "equity" : "crypto",
+      asset_class: alpacaOrder.asset_class === 'us_equity' ? 'equity' : 'crypto',
       submitted_at: alpacaOrder.submitted_at,
       filled_at: alpacaOrder.filled_at ?? null,
-      // Default extra fields for manual sync
       risk_amount: null,
       portfolio_weight_at_order: null,
       stop_loss_price: null,
@@ -110,15 +116,10 @@ async function run() {
       trade_type: null,
     };
 
-    const { error } = await supabase
-      .from("orders")
-      .upsert(payload, { onConflict: "broker_order_id" });
-
+    const { error } = await supabase.from('orders').insert(payload);
+    
     if (error) {
-      console.error(
-        `❌ Error insertando orden ${alpacaOrder.id}:`,
-        error.message,
-      );
+      console.error(`❌ Error insertando orden ${alpacaOrder.id}:`, error.message);
     } else {
       insertCount++;
     }
