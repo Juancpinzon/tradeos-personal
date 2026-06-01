@@ -151,6 +151,7 @@ Deno.serve(async (req: Request) => {
         equity,
         cash,
         buying_power: buyingPower,
+        snapshot_at: new Date().toISOString(),
       }).then(({ error }) => {
         if (error) console.error("[account] equity_snapshots insert error:", error.message);
       });
