@@ -1,6 +1,7 @@
 # CLAUDE.md — TradeOS Personal
 ## Plataforma web de inversiones y trading NYSE + Cripto
 
+**Última actualización:** 01/06/26
 > **Agente**: Lee este archivo completo antes de escribir cualquier línea de código. Es tu contrato de comportamiento para todo el proyecto. No omitas secciones. No asumas lo que no está escrito aquí.
 
 ---
@@ -1167,4 +1168,12 @@ Nuevo ítem en Sidebar entre Journal y Screener: 📋 Plan de Vuelo → /flight-
 - [x] **Integración en Research**: Selector de timeframe e indicadores toggles nativos e interactivos en la vista de búsqueda de activos.
 - [x] **Integración en Trading**: Split horizontal (40% Order Entry, 60% Chart nativo) y líneas de precios referenciales (Stop Loss y Target) dibujadas e interactuadas reactivamente desde el formulario de órdenes.
 - [x] **Zustand tradingStore**: Sincronización robusta en tiempo real de los campos clave del formulario (`symbol`, `stopLossPrice`, `targetPrice`, `entryPrice`) con el gráfico nativo.
+
+---
+
+## 🚀 Fase 14: Bug Fixes & Proxy Optimizations [COMPLETADA - 01/06/26]
+
+- [x] **Equity Chart Dinámico**: Incorporación de dominio de `YAxis` (`['auto', 'auto']`) en `EquityChart` para hacer zoom en variaciones de capital y evitar el efecto visual de "gráfico plano".
+- [x] **Snapshots de Equity**: Adición explícita de `snapshot_at` en la inserción fire-and-forget de la edge function `alpaca-proxy` (`GET /account`), resolviendo problemas de fallback.
+- [x] **CORS en FMP Proxy**: Despliegue optimizado de la edge function `fmp-proxy` con `--no-verify-jwt` para habilitar el paso exitoso de peticiones preflight (`OPTIONS`) requeridas en las solicitudes del browser al FMP Earnings Calendar.
 
