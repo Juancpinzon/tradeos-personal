@@ -101,9 +101,13 @@ Deno.serve(async (req) => {
     // ── Step 1c: Fetch Pricing/Quotes from Alpaca Snapshots for ALL US standard assets ──
     console.log("[Sync] Step 1c: Fetching pricing snapshots from Alpaca...")
     const snapshots = await fetchAllAlpacaSnapshots(alpacaSymbols, alpacaKey!, alpacaSecret!)
-    console.log(`[Sync] Fetched Alpaca pricing snapshots for ${Object.keys(snapshots).length} symbols`)
+    const snapshotCount = Object.keys(snapshots).length
+    console.log(`[Sync] Snapshot coverage: ${snapshotCount}/${alpacaSymbols.length} symbols returned data (${alpacaSymbols.length - snapshotCount} with no data)`)
 
     // Filter to active, liquid assets first to minimize FMP API footprint
+    const noSnapshotCount = filteredAssets.filter((a: any) => !snapshots[a.symbol.toUpperCase()]).length
+    console.log(`[Sync] Of ${filteredAssets.length} filtered assets: ${noSnapshotCount} had no Alpaca snapshot`)
+
     const liquidAssets = filteredAssets.filter((a: any) => {
       const sym = a.symbol.toUpperCase()
       const snap = snapshots[sym]
@@ -151,6 +155,7 @@ Deno.serve(async (req) => {
       const cap = marketCaps.get(a.symbol.toUpperCase())
       return cap != null && cap > 500000000
     })
+    console.log(`[Sync] Funnel summary: ${alpacaSymbols.length} assets → ${snapshotCount} with snapshots → ${liquidAssets.length} liquid → ${finalAssets.length} with market cap >$500M`)
     console.log(`[Sync] Filtered to ${finalAssets.length} symbols with market cap > 500M`)
 
     // ── Step 1e: Map to Database Rows ──────────────────────────────────────────
@@ -426,6 +431,12 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
+        funnel: {
+          alpaca_assets_total: alpacaSymbols.length,
+          snapshots_returned: Object.keys(snapshots).length,
+          liquid_assets: liquidAssets.length,
+          final_synced: universeRows.length,
+        },
         assets_synced: universeRows.length,
         fundamentals_fetched: fetched,
         fundamentals_errors: errors,
@@ -486,41 +497,74 @@ async function fetchAllFmpMarketCaps(symbols: string[], fmpKey: string): Promise
   return marketCaps
 }
 
-// Helper to fetch quotes/snapshots in batches of 400 from Alpaca
+// Helper to fetch quotes/snapshots in batches of 100 from Alpaca, 5 batches in parallel
 async function fetchAllAlpacaSnapshots(
   symbols: string[],
   alpacaKey: string,
   alpacaSecret: string,
 ): Promise<Record<string, any>> {
-  const batchSize = 400
+  const BATCH_SIZE = 100
+  const MAX_CONCURRENT = 5
   const snapshots: Record<string, any> = {}
   const batches: string[][] = []
-  for (let i = 0; i < symbols.length; i += batchSize) {
-    batches.push(symbols.slice(i, i + batchSize))
+
+  for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+    batches.push(symbols.slice(i, i + BATCH_SIZE))
   }
 
-  console.log(`[Sync] Fetching pricing snapshots from Alpaca in ${batches.length} batches...`)
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i]
-    try {
-      const url = `https://data.alpaca.markets/v2/stocks/snapshots?symbols=${batch.join(",")}`
-      const res = await fetch(url, {
-        headers: {
-          "APCA-API-KEY-ID": alpacaKey,
-          "APCA-API-SECRET-KEY": alpacaSecret,
-        },
+  console.log(`[Sync/AlpacaSnap] ${symbols.length} symbols → ${batches.length} batches of ${BATCH_SIZE} (${MAX_CONCURRENT} concurrent)`)
+
+  let totalReturned = 0
+  let batchErrors = 0
+
+  for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
+    const concurrentGroup = batches.slice(i, i + MAX_CONCURRENT)
+
+    const results = await Promise.allSettled(
+      concurrentGroup.map(async (batch, localIdx) => {
+        const batchIndex = i + localIdx
+        try {
+          const url = `https://data.alpaca.markets/v2/stocks/snapshots?symbols=${batch.join(",")}&feed=iex`
+          const res = await fetch(url, {
+            headers: {
+              "APCA-API-KEY-ID": alpacaKey,
+              "APCA-API-SECRET-KEY": alpacaSecret,
+            },
+          })
+          if (res.ok) {
+            const data = await res.json()
+            const returned = Object.keys(data).length
+            console.log(`[Sync/AlpacaSnap] Batch ${batchIndex + 1}/${batches.length}: ${returned}/${batch.length} symbols returned`)
+            return data
+          } else {
+            const errText = await res.text().catch(() => "")
+            console.error(`[Sync/AlpacaSnap] Batch ${batchIndex + 1} HTTP ${res.status}: ${errText.slice(0, 200)}`)
+            return {}
+          }
+        } catch (err) {
+          console.error(`[Sync/AlpacaSnap] Batch ${batchIndex + 1} exception:`, err)
+          return {}
+        }
       })
-      if (res.ok) {
-        const data = await res.json()
-        Object.assign(snapshots, data)
+    )
+
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        const count = Object.keys(result.value).length
+        totalReturned += count
+        Object.assign(snapshots, result.value)
       } else {
-        console.error(`[Sync/AlpacaSnap] Alpaca batch ${i} returned status: ${res.status}`)
+        batchErrors++
       }
-    } catch (err) {
-      console.error(`[Sync/AlpacaSnap] Error fetching Alpaca batch ${i}:`, err)
     }
-    await new Promise((r) => setTimeout(r, 80))
+
+    // Delay between concurrent groups to respect rate limits
+    if (i + MAX_CONCURRENT < batches.length) {
+      await new Promise((r) => setTimeout(r, 300))
+    }
   }
+
+  console.log(`[Sync/AlpacaSnap] Complete: ${totalReturned} total snapshots from ${symbols.length} symbols (${batchErrors} failed batches)`)
   return snapshots
 }
 
