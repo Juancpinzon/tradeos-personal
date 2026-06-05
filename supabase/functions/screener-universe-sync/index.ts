@@ -49,6 +49,15 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // ── Step 0: Count existing tickers already in screener_universe ────────────
+    const { count: existingUniverseCount, error: existingCountErr } = await supabase
+      .from("screener_universe")
+      .select("*", { count: "exact", head: true })
+    if (existingCountErr) {
+      console.error("[Sync] Error counting existing screener_universe rows:", existingCountErr)
+    }
+    console.log(`[Sync] Step 0: screener_universe currently holds ${existingUniverseCount ?? 0} tickers before sync`)
+
     // ── Step 1: Fetch assets from Alpaca ──────────────────────────────────────
     console.log("[Sync] Step 1: Fetching assets from Alpaca...")
     const response = await fetch(
@@ -99,8 +108,14 @@ Deno.serve(async (req) => {
     )
 
     // ── Step 1c: Fetch Pricing/Quotes from Alpaca Snapshots for ALL US standard assets ──
-    console.log("[Sync] Step 1c: Fetching pricing snapshots from Alpaca...")
-    const snapshots = await fetchAllAlpacaSnapshots(alpacaSymbols, alpacaKey!, alpacaSecret!)
+    // Prefer `delayed_sip` (consolidated SIP tape, 15-min delayed) for ACCURATE prices.
+    // The old `iex` feed only reflects IEX-exchange trades (~2% of volume) and produces
+    // wrong/stale prices even for mega-caps. Auto-detect once, fall back to `iex` if the
+    // account lacks SIP access so we never end up with an empty snapshot set (which would
+    // trigger the stale-ticker purge and wipe the universe).
+    const dataFeed = await detectAlpacaFeed(alpacaSymbols, alpacaKey!, alpacaSecret!)
+    console.log(`[Sync] Step 1c: Fetching pricing snapshots from Alpaca using feed='${dataFeed}'...`)
+    const snapshots = await fetchAllAlpacaSnapshots(alpacaSymbols, alpacaKey!, alpacaSecret!, dataFeed)
     const snapshotCount = Object.keys(snapshots).length
     console.log(`[Sync] Snapshot coverage: ${snapshotCount}/${alpacaSymbols.length} symbols returned data (${alpacaSymbols.length - snapshotCount} with no data)`)
 
@@ -293,6 +308,13 @@ Deno.serve(async (req) => {
       console.warn("[Sync] No assets were synced in this run. Skipping purge step to prevent wiping out database.")
     }
 
+    // ── Final price-sync summary ──────────────────────────────────────────────
+    console.log(
+      `[Sync] ✅ Actualizados ${universeRows.length} de ${finalAssets.length} tickers ` +
+      `(antes había ${existingUniverseCount ?? 0} en DB | feed='${dataFeed}' | ` +
+      `snapshots: ${snapshotCount}/${alpacaSymbols.length} | líquidos: ${liquidAssets.length})`
+    )
+
     // ── Step 2: Find symbols needing fundamentals refresh ─────────────────────
     console.log("[Sync] Step 2: Querying fundamentals_cache for stale/missing symbols...")
 
@@ -432,6 +454,8 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         funnel: {
+          existing_before_sync: existingUniverseCount ?? 0,
+          data_feed: dataFeed,
           alpaca_assets_total: alpacaSymbols.length,
           snapshots_returned: Object.keys(snapshots).length,
           liquid_assets: liquidAssets.length,
@@ -497,11 +521,47 @@ async function fetchAllFmpMarketCaps(symbols: string[], fmpKey: string): Promise
   return marketCaps
 }
 
+// Probe the best available Alpaca data feed once. Prefer `delayed_sip` (full
+// consolidated tape, 15-min delayed) for accurate prices; fall back to `iex` if
+// the account's plan does not grant SIP access (HTTP 403 / empty response).
+async function detectAlpacaFeed(
+  symbols: string[],
+  alpacaKey: string,
+  alpacaSecret: string,
+): Promise<"delayed_sip" | "iex"> {
+  const probe = symbols.slice(0, 5)
+  if (probe.length === 0) return "iex"
+  try {
+    const url = `https://data.alpaca.markets/v2/stocks/snapshots?symbols=${probe.join(",")}&feed=delayed_sip`
+    const res = await fetch(url, {
+      headers: {
+        "APCA-API-KEY-ID": alpacaKey,
+        "APCA-API-SECRET-KEY": alpacaSecret,
+      },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && Object.keys(data).length > 0) {
+        console.log("[Sync/AlpacaSnap] Feed probe: 'delayed_sip' available — using consolidated SIP prices")
+        return "delayed_sip"
+      }
+      console.warn("[Sync/AlpacaSnap] 'delayed_sip' probe returned empty — falling back to 'iex'")
+    } else {
+      const body = await res.text().catch(() => "")
+      console.warn(`[Sync/AlpacaSnap] 'delayed_sip' probe HTTP ${res.status} (${body.slice(0, 120)}) — falling back to 'iex'`)
+    }
+  } catch (err) {
+    console.warn("[Sync/AlpacaSnap] 'delayed_sip' probe threw — falling back to 'iex':", err)
+  }
+  return "iex"
+}
+
 // Helper to fetch quotes/snapshots in batches of 100 from Alpaca, 5 batches in parallel
 async function fetchAllAlpacaSnapshots(
   symbols: string[],
   alpacaKey: string,
   alpacaSecret: string,
+  feed: "delayed_sip" | "iex" = "iex",
 ): Promise<Record<string, any>> {
   const BATCH_SIZE = 100
   const MAX_CONCURRENT = 5
@@ -512,7 +572,7 @@ async function fetchAllAlpacaSnapshots(
     batches.push(symbols.slice(i, i + BATCH_SIZE))
   }
 
-  console.log(`[Sync/AlpacaSnap] ${symbols.length} symbols → ${batches.length} batches of ${BATCH_SIZE} (${MAX_CONCURRENT} concurrent)`)
+  console.log(`[Sync/AlpacaSnap] ${symbols.length} symbols → ${batches.length} batches of ${BATCH_SIZE} (${MAX_CONCURRENT} concurrent, feed='${feed}')`)
 
   let totalReturned = 0
   let batchErrors = 0
@@ -524,7 +584,7 @@ async function fetchAllAlpacaSnapshots(
       concurrentGroup.map(async (batch, localIdx) => {
         const batchIndex = i + localIdx
         try {
-          const url = `https://data.alpaca.markets/v2/stocks/snapshots?symbols=${batch.join(",")}&feed=iex`
+          const url = `https://data.alpaca.markets/v2/stocks/snapshots?symbols=${batch.join(",")}&feed=${feed}`
           const res = await fetch(url, {
             headers: {
               "APCA-API-KEY-ID": alpacaKey,
