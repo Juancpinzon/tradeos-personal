@@ -165,13 +165,37 @@ Deno.serve(async (req) => {
       console.warn("[Sync] FMP_API_KEY not configured. Using cached market caps only.")
     }
 
-    // Filter liquid assets to those with market cap > 500M
-    const finalAssets = liquidAssets.filter((a: any) => {
-      const cap = marketCaps.get(a.symbol.toUpperCase())
-      return cap != null && cap > 500000000
-    })
-    console.log(`[Sync] Funnel summary: ${alpacaSymbols.length} assets → ${snapshotCount} with snapshots → ${liquidAssets.length} liquid → ${finalAssets.length} with market cap >$500M`)
-    console.log(`[Sync] Filtered to ${finalAssets.length} symbols with market cap > 500M`)
+    // ── Define the universe by RELEVANCE, not solely by FMP market cap ─────────
+    // FMP's free plan cannot supply market caps in batch (legacy endpoints 403 and
+    // the batch endpoint is not in-plan), and Alpaca does not expose market cap at
+    // all. Gating purely on a *known* cap created a chicken-and-egg trap: a symbol
+    // needed a cap to enter the universe, but detailed caps were only fetched for
+    // symbols already in the universe → it never grew past ~82.
+    //
+    // Fix: qualify a symbol if EITHER it has a known cap > $100M (relaxed from
+    // $500M) OR its daily dollar-volume (price × volume) clears a liquidity bar —
+    // a reliable "relevant, tradeable company" proxy we get for free from Alpaca.
+    // Keep the top MAX_UNIVERSE by dollar volume so the run and screener stay bounded.
+    const MIN_CAP = 100_000_000          // $100M — relaxed real-cap threshold
+    const MIN_DOLLAR_VOLUME = 20_000_000 // $20M traded/day — liquidity/size proxy
+    const MAX_UNIVERSE = 800
+
+    const scored = liquidAssets
+      .map((a: any) => {
+        const sym = a.symbol.toUpperCase()
+        const snap = snapshots[sym]
+        const price = getAssetPrice(snap) ?? 0
+        const volume = snap?.dailyBar?.v ?? snap?.latestTrade?.s ?? 0
+        const dollarVol = price * volume
+        const cap = marketCaps.get(sym) ?? null
+        return { asset: a, sym, dollarVol, cap }
+      })
+      .filter((x: any) => (x.cap != null ? x.cap > MIN_CAP : x.dollarVol >= MIN_DOLLAR_VOLUME))
+      .sort((a: any, b: any) => b.dollarVol - a.dollarVol)
+
+    const finalAssets = scored.slice(0, MAX_UNIVERSE).map((x: any) => x.asset)
+    const withKnownCap = scored.slice(0, MAX_UNIVERSE).filter((x: any) => x.cap != null).length
+    console.log(`[Sync] Funnel summary: ${alpacaSymbols.length} assets → ${snapshotCount} with snapshots → ${liquidAssets.length} liquid → ${finalAssets.length} in universe (${withKnownCap} with known cap, ${finalAssets.length - withKnownCap} by dollar-volume proxy, threshold $${(MIN_DOLLAR_VOLUME / 1e6).toFixed(0)}M/day)`)
 
     // ── Step 1e: Map to Database Rows ──────────────────────────────────────────
     const syncedAt = new Date().toISOString()
@@ -180,7 +204,7 @@ Deno.serve(async (req) => {
 
     for (const asset of finalAssets) {
       const sym = asset.symbol.toUpperCase()
-      const cap = marketCaps.get(sym) ?? 0
+      const cap = marketCaps.get(sym) ?? null
       const snap = snapshots[sym]
 
       const price = getAssetPrice(snap)

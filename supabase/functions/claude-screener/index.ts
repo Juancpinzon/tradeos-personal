@@ -161,8 +161,14 @@ Deno.serve(async (req: Request) => {
         `symbol.ilike.%${criteria.symbol_query}%,name.ilike.%${criteria.symbol_query}%`,
       );
     }
+    // Allow rows with an unknown (null) market cap through this gate: many liquid
+    // names enter the universe via the dollar-volume proxy and lack a cap until it
+    // is resolved on-the-fly for top candidates below. Excluding nulls here would
+    // make the expanded universe invisible to any preset that sets market_cap_min.
     if (criteria.market_cap_min)
-      query = query.gte("market_cap", criteria.market_cap_min);
+      query = query.or(
+        `market_cap.gte.${criteria.market_cap_min},market_cap.is.null`,
+      );
     if (criteria.price_min) query = query.gte("price", criteria.price_min);
     if (criteria.volume_avg_min)
       query = query.gte("volume_avg_30d", criteria.volume_avg_min);
@@ -171,7 +177,14 @@ Deno.serve(async (req: Request) => {
     }
     // Shifting growth and EPS positive filters to dynamic JavaScript-based filtering layer
 
-    const { data: universe, error: universeError } = await query.limit(200);
+    // Fetch the most-traded names first (share volume as an orderable liquidity
+    // proxy; PostgREST can't order by computed price×volume). A generous 400-row
+    // slice ensures genuine large-caps survive the share-volume ordering before the
+    // JS dollar-volume re-sort below picks the true top candidates — otherwise a
+    // burst of high-share-count penny/leveraged-ETF names could crowd them out.
+    const { data: universe, error: universeError } = await query
+      .order("volume_avg_30d", { ascending: false, nullsLast: true })
+      .limit(400);
     if (universeError)
       return errJson(`Universe query error: ${universeError.message}`, 500);
 
@@ -206,8 +219,11 @@ Deno.serve(async (req: Request) => {
         [],
     );
 
-    // Sort symbols by market cap descending to prioritize industry leaders
-    const sortedUniverse = [...universe].sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
+    // Prioritize by dollar volume (price × volume) so the top candidates are the
+    // most actively traded names — works whether or not a market cap is known yet,
+    // and is what gets fundamentals resolved on-the-fly below.
+    const dollarVol = (r: UniverseRow) => (r.price || 0) * (r.volume_avg_30d || 0);
+    const sortedUniverse = [...universe].sort((a, b) => dollarVol(b) - dollarVol(a));
     const topCandidates = sortedUniverse.slice(0, 30);
     const topSymbols = topCandidates.map((c) => c.symbol);
 
@@ -325,7 +341,10 @@ Deno.serve(async (req: Request) => {
 
     const candidateData = candidates.map((c: UniverseRow) => {
       const f = cacheMap.get(c.symbol);
-      const price = f?.price ?? c.price;
+      // Authoritative price comes from screener_universe (freshly synced via Alpaca
+      // delayed_sip). fundamentals_cache.price is a secondary fallback only — it can
+      // hold stale FMP/Yahoo quotes, so it must NOT override the synced price.
+      const price = c.price ?? f?.price;
       const w52h = f?.week_52_high ?? null;
       const athDistancePct =
         w52h != null && price != null && w52h > 0
