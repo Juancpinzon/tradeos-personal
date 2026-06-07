@@ -1299,3 +1299,6 @@ CLAUDE.md actualizado. Cambios aplicados:
 
 > **Nota para el agente**: Si el diff es muy grande o cubre múltiples fases,
 > pedir confirmación antes de hacer cambios estructurales al CLAUDE.md.
+
+> **Nota para el agente**:NUNCA crear archivos de documentación separados.
+> Todos los cambios van integrados en este CLAUDE.md, no en archivos externos.
