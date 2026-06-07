@@ -1243,62 +1243,50 @@ Nuevo ítem en Sidebar entre Journal y Screener: 📋 Plan de Vuelo → /flight-
 
 # 🔄 Instrucción de Auto-actualización
 
-## 🔄 Cómo mantener este archivo actualizado
-
+🔄 Cómo mantener este archivo actualizado
 Cuando el usuario diga cualquiera de estas frases:
 
-- "actualiza el md"
-- "sincroniza el CLAUDE.md"
-- "el md quedó desactualizado"
-- "registra los cambios de esta sesión"
+"Lee el git diff de los últimos commits y actualiza el archivo CLAUDE.md siguiendo las instrucciones de la sección 🔄 que está al final del archivo"
+"actualiza el CLAUDE.md con los cambios recientes"
+"sincroniza el CLAUDE.md con el git diff"
+"registra los cambios de esta sesión en el CLAUDE.md"
 
-Ejecutar este flujo **en orden**:
+Evitar frases cortas como "actualiza el md" — pueden ser interceptadas por el sistema de memoria automático de Claude Code.
 
-### 1. Leer el estado actual
+Ejecutar este flujo en orden:
 
-```bash
-cat CLAUDE.md
-git log --oneline -10
-git diff HEAD~1 --stat
-```
+1. Leer el estado actual
+   bashcat CLAUDE.md
+   git log --oneline -10
+   git diff HEAD~1 --stat
+2. Leer el diff completo si hay cambios relevantes
+   bashgit diff HEAD~1
+3. Mapear cambios a secciones
+   Identificar qué secciones del CLAUDE.md se ven afectadas:
 
-### 2. Leer el diff completo si hay cambios relevantes
+Archivos nuevos en src/ → posible cambio en Estructura del Proyecto
+Archivos en supabase/migrations/ → actualizar Schema de Base de Datos
+Cambios en src/hooks/ o src/lib/ → posible cambio en Flujos o Reglas de Código
+Cambios en package.json → actualizar Stack Tecnológico
+Fases completadas → marcar [x] en Orden de Construcción
 
-```bash
-git diff HEAD~1
-```
+4. Actualizar solo las secciones afectadas
 
-### 3. Mapear cambios a secciones
+Marcar fases completadas con [x] o ✅
+Agregar tablas/campos nuevos al schema
+Registrar patrones nuevos en Reglas de Código
+NO reescribir secciones no afectadas
+NO cambiar los Principios Irrompibles sin confirmación
 
-Identificar qué secciones del CLAUDE.md se ven afectadas:
+5. Confirmar al usuario
+   CLAUDE.md actualizado. Cambios aplicados:
 
-- Archivos nuevos en `src/` → posible cambio en Estructura del Proyecto
-- Archivos en `supabase/migrations/` → actualizar Schema de Base de Datos
-- Cambios en `src/hooks/` o `src/lib/` → posible cambio en Flujos o Reglas de Código
-- Cambios en `package.json` → actualizar Stack Tecnológico
-- Fases completadas → marcar `[x]` en Orden de Construcción
-
-### 4. Actualizar solo las secciones afectadas
-
-- Marcar fases completadas con `[x]` o `✅`
-- Agregar tablas/campos nuevos al schema
-- Registrar patrones nuevos en Reglas de Código
-- NO reescribir secciones no afectadas
-- NO cambiar los Principios Irrompibles sin confirmación
-
-### 5. Confirmar al usuario
-
-```
-CLAUDE.md actualizado. Cambios aplicados:
 - [sección]: [qué cambió]
 - [sección]: [qué cambió]
-⚠️ [inconsistencia si la hay]
-```
+  ⚠️ [inconsistencia si la hay]
 
----
+Nota para el agente: Si el diff es muy grande o cubre múltiples fases,
+pedir confirmación antes de hacer cambios estructurales al CLAUDE.md.
 
-> **Nota para el agente**: Si el diff es muy grande o cubre múltiples fases,
-> pedir confirmación antes de hacer cambios estructurales al CLAUDE.md.
-
-> **Nota para el agente**:NUNCA crear archivos de documentación separados.
-> Todos los cambios van integrados en este CLAUDE.md, no en archivos externos.
+NUNCA crear archivos de documentación separados.
+Todos los cambios van integrados en este CLAUDE.md, no en archivos externos.
