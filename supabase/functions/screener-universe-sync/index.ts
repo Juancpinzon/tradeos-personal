@@ -342,20 +342,24 @@ Deno.serve(async (req) => {
     // ── Step 2: Find symbols needing fundamentals refresh ─────────────────────
     console.log("[Sync] Step 2: Querying fundamentals_cache for stale/missing symbols...")
 
+    // Priorizar por dollar-volume (precio × volumen), que es el mismo ranking
+    // que usa el screener — priorizar por market_cap hacía que los símbolos que
+    // el screener realmente evalúa tardaran días en recibir fundamentales.
     const { data: allUniverseSymbols, error: symError } = await supabase
       .from("screener_universe")
-      .select("symbol, market_cap")
-      .order("market_cap", { ascending: false, nullsLast: true })
-      .limit(500)
+      .select("symbol, price, volume_avg_30d")
 
     if (symError) {
       console.error("[Sync] Error querying screener_universe:", symError)
       throw symError
     }
 
+    // IMPORTANTE: incluir revenue_growth_pct en el select — needsRefresh() lo
+    // consulta; si no viene en el select es siempre undefined y TODOS los
+    // símbolos parecen necesitar refresh, desperdiciando la cuota diaria de AV.
     const { data: existingCache } = await supabase
       .from("fundamentals_cache")
-      .select("symbol, week_52_high, fetched_at")
+      .select("symbol, week_52_high, revenue_growth_pct, fetched_at")
 
     const cacheMap = new Map(
       (existingCache ?? []).map((r: any) => [r.symbol, r]),
@@ -373,7 +377,12 @@ Deno.serve(async (req) => {
       return now - new Date(cached.fetched_at).getTime() > TTL
     }
 
-    const allSymbols = (allUniverseSymbols ?? []).map((r: any) => r.symbol as string)
+    const allSymbols = [...(allUniverseSymbols ?? [])]
+      .sort((a: any, b: any) =>
+        ((b.price ?? 0) * (b.volume_avg_30d ?? 0)) -
+        ((a.price ?? 0) * (a.volume_avg_30d ?? 0)))
+      .slice(0, 500)
+      .map((r: any) => r.symbol as string)
 
     const toFetch = [
       // Primero los que ya tienen cache pero necesitan refresh (screener los usa activamente)

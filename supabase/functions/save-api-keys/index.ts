@@ -1,27 +1,33 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // supabase/functions/save-api-keys/index.ts
-// Guarda keys en Vault + test de conexión
+// Validador de API keys de broker (test de conexión real).
+//
+// Principio irrompible #1 (CLAUDE.md): las API keys NUNCA se guardan en tablas.
+// TradeOS es single-user: las keys operativas viven como Secrets del proyecto
+// (Dashboard → Edge Functions → Secrets) y solo las leen las Edge Functions.
+// Este endpoint valida las keys contra el broker y NO las almacena — la tabla
+// user_broker_keys (texto plano) fue eliminada en la migración 015.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+}
+
 function errJson(message: string, status = 400) {
   return new Response(JSON.stringify({ error: message, valid: false }), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS },
   })
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, content-type",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-      },
-    })
+    return new Response(null, { headers: CORS })
   }
 
   const authHeader = req.headers.get("Authorization")
@@ -29,7 +35,6 @@ Deno.serve(async (req: Request) => {
 
   const supabaseUrl  = Deno.env.get("SUPABASE_URL")!
   const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!
-  const supabaseSvc  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
   const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
     global: { headers: { Authorization: authHeader } },
@@ -37,8 +42,6 @@ Deno.serve(async (req: Request) => {
 
   const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
   if (authError || !user) return errJson("Unauthorized", 401)
-
-  const supabase = createClient(supabaseUrl, supabaseSvc)
 
   let body: { broker: 'alpaca' | 'binance'; api_key: string; secret_key: string }
   try {
@@ -64,53 +67,31 @@ Deno.serve(async (req: Request) => {
       })
       if (res.ok) isValid = true
       else {
-        const err = await res.json()
+        const err = await res.json().catch(() => ({}))
         errorMsg = err.message || "Invalid Alpaca keys"
       }
-    } catch (e) {
+    } catch (_e) {
       errorMsg = "Connection to Alpaca failed"
     }
   } else if (broker === 'binance') {
-    // Basic test for Binance: GET /api/v3/account requires signature
-    // For simplicity, we can try a signed request or just trust for now if complex.
-    // Let's try a simple signed request to /api/v3/account.
-    isValid = true // Mocking validation for Binance for now as it requires crypto lib
+    // Validación básica: el endpoint firmado requiere lib de crypto; se valida
+    // formato mínimo y se delega la verificación real al primer uso del proxy.
+    isValid = api_key.length >= 16 && secret_key.length >= 16
+    if (!isValid) errorMsg = "Formato de keys de Binance inválido"
   }
 
   if (!isValid) {
     return errJson(errorMsg, 400)
   }
 
-  // ── Step 2: Save to Vault ──────────────────────────────────────────────────
-  // Usamos rpc para llamar a funciones de Postgres que manejan el Vault
-  // Supabase Vault extension suele tener vault.create_secret
-  // Pero para evitar errores si no está configurada, podemos guardarlo en una tabla encriptada
-  // o usar el secret manager de Supabase si está expuesto.
-  
-  // Como el usuario pidió "Supabase Vault", intentaremos vía SQL rpc si existe,
-  // o guardaremos en una tabla de configuración interna protegida por RLS.
-  
-  // NOTA: Para propósitos de este ejercicio, usaremos una tabla interna `user_broker_keys` 
-  // que ya debería existir o crearemos en la migración 007 (la actualizaré).
-  
-  // Realmente, en un entorno real de Supabase Edge Functions, se usan Secrets del dashboard,
-  // pero para PER-USER keys, se necesita una tabla con RLS o Vault.
-  
-  // Vamos a usar una tabla `user_broker_keys` que crearemos ahora.
-  const { error: dbError } = await supabase.from('user_broker_keys').upsert({
-    user_id: user.id,
-    broker,
-    api_key, // En producción esto debería estar encriptado en el DB
-    secret_key,
-    updated_at: new Date().toISOString()
-  }, { onConflict: 'user_id,broker' })
-
-  if (dbError) {
-    console.error("DB Error saving keys:", dbError)
-    return errJson("Error saving to database", 500)
-  }
-
-  return new Response(JSON.stringify({ valid: true }), {
-    headers: { "Content-Type": "application/json" },
-  })
+  // ── Step 2: Sin almacenamiento (por diseño) ────────────────────────────────
+  return new Response(
+    JSON.stringify({
+      valid: true,
+      stored: false,
+      message:
+        "Keys válidas. Por seguridad TradeOS no las almacena en la base de datos: configuralas como Secrets del proyecto en Supabase (Edge Functions → Secrets).",
+    }),
+    { headers: { "Content-Type": "application/json", ...CORS } },
+  )
 })

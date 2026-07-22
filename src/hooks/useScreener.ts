@@ -88,24 +88,26 @@ export function useScreener() {
       );
 
       if (!response.ok) {
-        if (response.status === 400) {
-          try {
-            const body = await response.json();
-            if (body.error === "universe_not_synced") {
-              window.dispatchEvent(
-                new CustomEvent("tradeos-toast", {
-                  detail: {
-                    title: "Error de Sincronización",
-                    message: "El universo del buscador no se encuentra sincronizado. Por favor, corre la sincronización.",
-                    color: "var(--color-loss)",
-                  },
-                })
-              );
-            }
-          } catch (e) {
-            console.error("Failed to parse error response:", e);
+        // Ningún fallo del screener puede ser silencioso: siempre un toast.
+        let title = "Error del Screener";
+        let message = "El screener falló. Intentá de nuevo en unos segundos.";
+        try {
+          const body = await response.json();
+          if (body?.error === "universe_not_synced") {
+            title = "Error de Sincronización";
+            message =
+              "El universo del buscador no se encuentra sincronizado. Por favor, corre la sincronización.";
+          } else if (body?.error) {
+            message = body.error;
           }
+        } catch (e) {
+          console.error("Failed to parse error response:", e);
         }
+        window.dispatchEvent(
+          new CustomEvent("tradeos-toast", {
+            detail: { title, message, color: "var(--color-loss)" },
+          })
+        );
         throw new Error("Screener execution failed");
       }
 

@@ -321,6 +321,20 @@ export interface ScreenerResultItem {
   already_in_watchlist: boolean;
 }
 
+// Desglose de descartes por filtro que devuelve claude-screener — permite
+// explicar en la UI POR QUÉ una corrida devolvió pocos o cero resultados.
+export interface ScreenerFilterBreakdown {
+  universo_base: number;
+  evaluados: number;
+  growth_sin_dato: number;
+  growth_insuficiente: number;
+  eps_descartados: number;
+  ath_sin_dato: number;
+  ath_lejos: number;
+  rsi_descartados: number;
+  rsi_omitido: boolean;
+}
+
 export interface ScreenerResult {
   id: string;
   user_id: string;
@@ -331,6 +345,7 @@ export interface ScreenerResult {
   total_passed_filters: number;
   ai_summary: string;
   run_at: string;
+  filter_breakdown?: ScreenerFilterBreakdown;
 }
 // ─── Añadir a src/types/index.ts ─────────────────────────────────────────────
 // (Estos tipos complementan los que ya tienes; no reemplaces los existentes)

@@ -291,6 +291,65 @@ export function ScreenerPanel() {
                 </div>
               </div>
 
+              {/* Desglose de filtros — explica por qué pasaron pocos/cero */}
+              {lastResult.filter_breakdown && (
+                <div
+                  style={{
+                    padding: "8px 24px",
+                    borderBottom: "1px solid var(--border-subtle)",
+                    fontSize: "12px",
+                    color: "var(--text-muted)",
+                    display: "flex",
+                    gap: "16px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span>
+                    Universo base: {lastResult.filter_breakdown.universo_base}
+                  </span>
+                  <span>Evaluados: {lastResult.filter_breakdown.evaluados}</span>
+                  {lastResult.filter_breakdown.growth_sin_dato > 0 && (
+                    <span>
+                      Sin dato de growth:{" "}
+                      {lastResult.filter_breakdown.growth_sin_dato}
+                    </span>
+                  )}
+                  {lastResult.filter_breakdown.growth_insuficiente > 0 && (
+                    <span>
+                      Growth insuficiente:{" "}
+                      {lastResult.filter_breakdown.growth_insuficiente}
+                    </span>
+                  )}
+                  {lastResult.filter_breakdown.eps_descartados > 0 && (
+                    <span>
+                      EPS descartados:{" "}
+                      {lastResult.filter_breakdown.eps_descartados}
+                    </span>
+                  )}
+                  {lastResult.filter_breakdown.ath_lejos > 0 && (
+                    <span>
+                      Lejos del ATH: {lastResult.filter_breakdown.ath_lejos}
+                    </span>
+                  )}
+                  {lastResult.filter_breakdown.ath_sin_dato > 0 && (
+                    <span>
+                      Sin dato ATH: {lastResult.filter_breakdown.ath_sin_dato}
+                    </span>
+                  )}
+                  {lastResult.filter_breakdown.rsi_descartados > 0 && (
+                    <span>
+                      RSI fuera de rango:{" "}
+                      {lastResult.filter_breakdown.rsi_descartados}
+                    </span>
+                  )}
+                  {lastResult.filter_breakdown.rsi_omitido && (
+                    <span style={{ color: "var(--color-warning)" }}>
+                      ⚠ Filtro RSI omitido (sin datos de barras)
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Tabla de Resultados */}
               <div style={{ flex: 1, minHeight: 0 }}>
                 <ScreenerResultsTable items={lastResult.results} />

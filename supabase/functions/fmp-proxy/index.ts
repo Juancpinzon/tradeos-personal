@@ -31,6 +31,43 @@ function err(message: string, status = 400) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// upsertFundamentals — merge con la fila existente: NUNCA sobreescribir un
+// valor no-null del cache con null. Sin esto, un proveedor degradado (AV sin
+// revenue, FMP con key-metrics en 403) "envenena" la caché: pisa datos buenos
+// con null y re-sella fetched_at, bloqueando el reintento por 24h.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function upsertFundamentals(
+  supabase: ReturnType<typeof createClient>,
+  symbol: string,
+  payload: Record<string, unknown>,
+) {
+  const { data: existing } = await supabase
+    .from("fundamentals_cache")
+    .select("*")
+    .eq("symbol", symbol)
+    .maybeSingle();
+
+  const merged: Record<string, unknown> = { ...(existing ?? {}), symbol };
+  for (const [k, v] of Object.entries(payload)) {
+    if (v !== null && v !== undefined) merged[k] = v;
+    else if (!(k in merged)) merged[k] = null;
+  }
+
+  const { error: upsertErr } = await supabase
+    .from("fundamentals_cache")
+    .upsert(merged, { onConflict: "symbol" });
+  if (upsertErr) {
+    console.error(`[Cache] Upsert error para ${symbol}:`, JSON.stringify(upsertErr));
+  } else {
+    console.log(
+      `[Cache] Upsert OK para ${symbol} — rev%=${merged.revenue_growth_pct} 52h=${merged.week_52_high}`,
+    );
+  }
+  return merged;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -230,31 +267,9 @@ async function getFundamentals(
     fetched_at: new Date().toISOString(),
   };
 
-  const { error: upsertErr } = await supabase.from("fundamentals_cache").upsert({
-    symbol,
-    eps_current: payload.eps_current,
-    eps_next_estimate: payload.eps_next_estimate,
-    eps_growth_next_pct: payload.eps_growth_next_pct,
-    revenue_growth_pct: payload.revenue_growth_pct,
-    pe_ratio: payload.pe_ratio,
-    next_earnings_date: payload.next_earnings_date,
-    next_earnings_estimate_eps: payload.next_earnings_estimate_eps,
-    price: payload.price,
-    market_cap: payload.market_cap,
-    week_52_high: payload.week_52_high,
-    week_52_low: payload.week_52_low,
-    price_change_pct_1d: payload.price_change_pct_1d,
-    volume: payload.volume,
-    name: payload.name,
-    fetched_at: new Date().toISOString(),
-  });
-  if (upsertErr) {
-    console.error(`[FMP] Upsert error para ${symbol}:`, JSON.stringify(upsertErr));
-  } else {
-    console.log(`[FMP] Upsert OK para ${symbol} — week_52_high=${payload.week_52_high}`);
-  }
+  const merged = await upsertFundamentals(supabase, symbol, payload);
 
-  return json({ source: "fmp", data: payload });
+  return json({ source: "fmp", data: merged });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -340,40 +355,18 @@ async function getMarketData(
     }
   }
 
-  const payload = {
-    symbol,
+  // 4. Upsert vía merge — este endpoint solo aporta precio/52w/volumen.
+  // No toca campos fundamentales ni re-sella fetched_at (que marca la frescura
+  // de los FUNDAMENTALES): así no bloquea el reintento on-the-fly por 24h.
+  const merged = await upsertFundamentals(supabase, symbol, {
     price: currentPrice,
     week_52_high: w52h,
     week_52_low: w52l,
     volume: currentVolume,
-    market_cap: null,
-    eps_current: null,
-    eps_next_estimate: null,
-    eps_growth_next_pct: null,
-    revenue_growth_pct: null,
-    pe_ratio: null,
-    next_earnings_date: null,
-    next_earnings_estimate_eps: null,
-    price_change_pct_1d: null,
-    name: symbol,
-    fetched_at: new Date().toISOString(),
-  };
+    fetched_at: cached?.fetched_at ?? new Date(0).toISOString(),
+  });
 
-  // 4. Upsert — never overwrite valid 52w data with null
-  const row: Record<string, unknown> = { ...payload };
-  if (payload.week_52_high === null) delete row.week_52_high;
-  if (payload.week_52_low === null) delete row.week_52_low;
-
-  const { error: upsertErr } = await supabase
-    .from("fundamentals_cache")
-    .upsert(row, { onConflict: "symbol" });
-  if (upsertErr) {
-    console.error(`[MarketData] Upsert error for ${symbol}:`, JSON.stringify(upsertErr));
-  } else {
-    console.log(`[MarketData] Upsert OK for ${symbol} — week_52_high=${payload.week_52_high}`);
-  }
-
-  return json({ source: "alpaca+fundamentals", data: payload });
+  return json({ source: "alpaca+fundamentals", data: merged });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -502,40 +495,10 @@ async function fetchYahooFinance(
     return json({ source: "yahoo", data: null }, 200);
   }
 
-  // 4. Upsert cache — never overwrite week_52_high/low with null
+  // 4. Upsert cache — merge: nunca sobreescribir datos válidos con null
   if (payload) {
-    const baseRow: Record<string, unknown> = {
-      symbol,
-      eps_current: payload.eps_current,
-      eps_next_estimate: payload.eps_next_estimate,
-      eps_growth_next_pct: payload.eps_growth_next_pct,
-      revenue_growth_pct: payload.revenue_growth_pct,
-      pe_ratio: payload.pe_ratio,
-      next_earnings_date: payload.next_earnings_date,
-      next_earnings_estimate_eps: payload.next_earnings_estimate_eps,
-      price: payload.price,
-      market_cap: payload.market_cap,
-      price_change_pct_1d: payload.price_change_pct_1d,
-      volume: payload.volume,
-      name: payload.name,
-      fetched_at: new Date().toISOString(),
-    };
-    if (payload.week_52_high !== null) baseRow.week_52_high = payload.week_52_high;
-    if (payload.week_52_low !== null) baseRow.week_52_low = payload.week_52_low;
-
-    const { error: upsertErr } = await supabase
-      .from("fundamentals_cache")
-      .upsert(baseRow, { onConflict: "symbol" });
-    if (upsertErr) {
-      console.error(
-        `[Yahoo] Upsert error for ${symbol}:`,
-        JSON.stringify(upsertErr),
-      );
-    } else {
-      console.log(
-        `[Yahoo] Upsert OK for ${symbol} — week_52_high=${payload.week_52_high}`,
-      );
-    }
+    const merged = await upsertFundamentals(supabase, symbol, payload);
+    return json({ source: "yahoo", data: merged });
   }
 
   return json({ source: "yahoo", data: payload });
@@ -589,12 +552,16 @@ async function fetchAlphaVantage(
   const priceChangePct1d = parseFloat(changePctRaw) || null;
   const currentVolume = parseFloat(gq["06. volume"] ?? "") || null;
 
+  // AV OVERVIEW sí trae crecimiento YoY trimestral (como fracción: 0.23 = 23%)
+  const qRevGrowth = parseFloat(av.QuarterlyRevenueGrowthYOY ?? "");
+  const qEpsGrowth = parseFloat(av.QuarterlyEarningsGrowthYOY ?? "");
+
   const payload = {
     symbol,
     eps_current: n("EPS"),
     eps_next_estimate: n("ForwardEPS"),
-    eps_growth_next_pct: null,
-    revenue_growth_pct: null,
+    eps_growth_next_pct: isNaN(qEpsGrowth) ? null : qEpsGrowth * 100,
+    revenue_growth_pct: isNaN(qRevGrowth) ? null : qRevGrowth * 100,
     pe_ratio: n("PERatio"),
     next_earnings_date: av.NextEarningsDate ?? null,
     next_earnings_estimate_eps: n("ForwardEPS"),
@@ -608,19 +575,7 @@ async function fetchAlphaVantage(
     fetched_at: new Date().toISOString(),
   };
 
-  const { error: upsertErr } = await supabase
-    .from("fundamentals_cache")
-    .upsert(payload);
-  if (upsertErr) {
-    console.error(
-      `[AV] Upsert error for ${symbol}:`,
-      JSON.stringify(upsertErr),
-    );
-  } else {
-    console.log(
-      `[AV] Upsert OK for ${symbol} — week_52_high=${payload.week_52_high}`,
-    );
-  }
+  const merged = await upsertFundamentals(supabase, symbol, payload);
 
-  return json({ source: "alpha_vantage", data: payload });
+  return json({ source: "alpha_vantage", data: merged });
 }

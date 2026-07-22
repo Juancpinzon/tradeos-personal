@@ -104,6 +104,26 @@ export function ScreenerResultsTable({ items }: Props) {
             </tr>
           </thead>
           <tbody>
+            {sortedItems.length === 0 && (
+              <tr>
+                <td
+                  colSpan={11}
+                  style={{
+                    ...tdStyle,
+                    textAlign: 'center',
+                    padding: '48px 24px',
+                    color: 'var(--text-muted)',
+                    fontSize: '14px',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Ningún candidato pasó los filtros de esta corrida.
+                  <br />
+                  Probá bajar el mínimo de crecimiento, ampliar la distancia al
+                  ATH o desactivar algún criterio, y volvé a correr.
+                </td>
+              </tr>
+            )}
             {sortedItems.map((item) => (
               <tr
                 key={item.symbol}
