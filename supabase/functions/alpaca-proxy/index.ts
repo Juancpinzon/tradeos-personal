@@ -37,6 +37,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabaseSvcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   const url = new URL(req.url);
@@ -55,29 +56,28 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // ── Auth (manual JWT decode) ──────────────────────────────────────────────
+  // ── Resolver el JWT del usuario ───────────────────────────────────────────
+  // useOrders manda el token del usuario en x-user-token (Authorization lleva el
+  // anon key); usePortfolio / useMarketData / functions.invoke lo mandan en
+  // Authorization. Aceptamos ambos, más ?token= para compatibilidad.
   const rawToken =
-    req.headers.get("x-user-token") ??
-    url.searchParams.get("token") ??
-    req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ??
+    req.headers.get("x-user-token") ||
+    url.searchParams.get("token") ||
+    req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ||
     "";
-  const authHeader = rawToken ? `Bearer ${rawToken}` : "";
-  if (!authHeader) return errJson("Missing authorization header", 401);
+  if (!rawToken) return errJson("Missing authorization header", 401);
+  const authHeader = `Bearer ${rawToken}`;
 
-  let userId: string;
-  try {
-    const token = authHeader.slice(7);
-    const parts = token.split(".");
-    if (parts.length !== 3) throw new Error("invalid jwt");
-    const raw = parts[1];
-    const padded = raw.replace(/-/g, "+").replace(/_/g, "/") + "====".slice((4 - raw.length % 4) % 4);
-    const payload = JSON.parse(atob(padded));
-    if (!payload.sub) throw new Error("no sub");
-    userId = payload.sub as string;
-    console.log("userId:", userId.substring(0, 8));
-  } catch (e) {
-    return errJson("Invalid token: " + String(e), 401);
-  }
+  // ── JWT validation via Supabase Auth ──────────────────────────────────────
+  // getUser() verifica la firma del token contra el servidor de Auth (mismo
+  // patrón que binance-proxy, save-api-keys, claude-research, claude-screener y
+  // claude-portfolio-doctor). NUNCA decodificamos el JWT manualmente sin verificar.
+  const supabaseAuth = createClient(supabaseUrl, supabaseAnon, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user }, error: authErr } = await supabaseAuth.auth.getUser();
+  if (authErr || !user) return errJson("Unauthorized", 401);
+  const userId = user.id;
 
   const adminClient = createClient(supabaseUrl, supabaseSvcKey);
 
@@ -367,6 +367,25 @@ Deno.serve(async (req: Request) => {
         );
 
       console.log('=== ALPACA ORDER RESPONSE ===', JSON.stringify(alpacaResponse));
+
+      // ── Idempotencia ──────────────────────────────────────────────────────
+      // Si ya existe una orden en la tabla con este broker_order_id, no la
+      // duplicamos: devolvemos la existente. broker_order_id lo asigna Alpaca,
+      // por eso la verificación ocurre aquí (después de la respuesta de Alpaca).
+      const { data: existingOrder } = await adminClient
+        .from('orders')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('broker_order_id', alpacaResponse.id)
+        .maybeSingle();
+
+      if (existingOrder) {
+        console.log('=== ORDEN YA REGISTRADA (idempotente) ===', alpacaResponse.id);
+        return jsonResponse(
+          { order: existingOrder, alpaca_order: alpacaResponse, idempotent: true },
+          200,
+        );
+      }
 
       const { data, error } = await adminClient
         .from('orders')

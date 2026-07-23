@@ -1,1 +1,4 @@
-verify_jwt = false
+# SEC-07: la validación de JWT la hace el gateway (verify_jwt) Y getUser() dentro
+# de la función. Todos los callers (useOrders, usePortfolio, useMarketData,
+# MarketPulse, functions.invoke) envían un JWT válido en Authorization.
+verify_jwt = true
