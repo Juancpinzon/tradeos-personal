@@ -39,6 +39,10 @@ export default function ConfirmOrderModal({
   const overlayRef = useRef<HTMLDivElement>(null)
   const [tradeType, setTradeType] = useState<'intraday' | 'swing' | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // Lock síncrono: bloquea un segundo submit en el mismo tick, antes de que
+  // React vuelva a renderizar y aplique `disabled` (el estado por sí solo puede
+  // leerse obsoleto en dos clicks rápidos). Solo se libera si la orden falla.
+  const submitLockRef = useRef(false)
 
   useEffect(() => {
     if (suggestedTradeType) {
@@ -48,7 +52,10 @@ export default function ConfirmOrderModal({
 
   // Reset local submitting when parent signals it's done (e.g. on error, modal stays open)
   useEffect(() => {
-    if (!isSubmittingProp) setIsSubmitting(false)
+    if (!isSubmittingProp) {
+      setIsSubmitting(false)
+      submitLockRef.current = false
+    }
   }, [isSubmittingProp])
 
   // Cerrar con Escape
@@ -324,7 +331,10 @@ export default function ConfirmOrderModal({
             id="modal-confirm-btn"
             className={`modal-btn ${isBuy ? 'modal-btn--buy' : 'modal-btn--sell'}`}
             onClick={() => {
-              if (!tradeType || isSubmitting || isSubmittingProp) return
+              // submitLockRef bloquea de forma síncrona el doble submit; el
+              // chequeo de estado cubre el re-render posterior.
+              if (submitLockRef.current || !tradeType || isSubmitting || isSubmittingProp) return
+              submitLockRef.current = true
               setIsSubmitting(true)
               onConfirm(tradeType)
             }}
