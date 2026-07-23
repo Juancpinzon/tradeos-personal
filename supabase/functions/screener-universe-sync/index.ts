@@ -396,6 +396,19 @@ Deno.serve(async (req) => {
     )
 
     // ── Step 3: Fetch fundamentals sequentially (150ms delay) ─────────────────
+    // Merge contra la fila COMPLETA del cache: nunca pisar un valor válido con
+    // null/NaN (mismo principio que upsertFundamentals en fmp-proxy). Sin esto,
+    // un proveedor degradado re-sella fetched_at y borra eps/pe/earnings válidos.
+    const { data: fullCacheRows } = await supabase
+      .from("fundamentals_cache")
+      .select("*")
+      .in("symbol", toFetch)
+    const fullCacheMap = new Map<string, any>(
+      (fullCacheRows ?? []).map((r: any) => [r.symbol, r]),
+    )
+    const numOrNull = (v: unknown) =>
+      typeof v === "number" && isFinite(v) ? v : null
+
     console.log("[Sync] Step 3: Fetching detailed fundamentals robustly...")
     let fetched = 0
     let errors = 0
@@ -411,30 +424,26 @@ Deno.serve(async (req) => {
         )
 
         if (payload) {
+          const prev = fullCacheMap.get(sym) ?? {}
           const row: Record<string, unknown> = {
+            ...prev,
             symbol: sym,
-            eps_current: payload.eps_current,
-            eps_next_estimate: payload.eps_next_estimate,
-            eps_growth_next_pct: payload.eps_growth_next_pct,
-            revenue_growth_pct: payload.revenue_growth_pct,
-            pe_ratio: payload.pe_ratio,
-            next_earnings_date: payload.next_earnings_date,
-            next_earnings_estimate_eps: payload.next_earnings_estimate_eps,
-            price: payload.price,
-            market_cap: payload.market_cap,
-            price_change_pct_1d: payload.price_change_pct_1d,
-            volume: payload.volume,
-            name: payload.name,
+            eps_current: numOrNull(payload.eps_current) ?? prev.eps_current ?? null,
+            eps_next_estimate: numOrNull(payload.eps_next_estimate) ?? prev.eps_next_estimate ?? null,
+            eps_growth_next_pct: numOrNull(payload.eps_growth_next_pct) ?? prev.eps_growth_next_pct ?? null,
+            revenue_growth_pct: numOrNull(payload.revenue_growth_pct) ?? prev.revenue_growth_pct ?? null,
+            pe_ratio: numOrNull(payload.pe_ratio) ?? prev.pe_ratio ?? null,
+            next_earnings_date: payload.next_earnings_date ?? prev.next_earnings_date ?? null,
+            next_earnings_estimate_eps: numOrNull(payload.next_earnings_estimate_eps) ?? prev.next_earnings_estimate_eps ?? null,
+            price: numOrNull(payload.price) ?? prev.price ?? null,
+            market_cap: numOrNull(payload.market_cap) ?? prev.market_cap ?? null,
+            price_change_pct_1d: numOrNull(payload.price_change_pct_1d) ?? prev.price_change_pct_1d ?? null,
+            volume: numOrNull(payload.volume) ?? prev.volume ?? null,
+            name: payload.name ?? prev.name ?? null,
+            week_52_high: numOrNull(payload.week_52_high) ?? prev.week_52_high ?? null,
+            week_52_low: numOrNull(payload.week_52_low) ?? prev.week_52_low ?? null,
             fetched_at: new Date().toISOString(),
           }
-
-          // Never overwrite existing valid 52w data in DB with null
-          const cachedFund = cacheMap.get(sym) as any
-          const db52h = cachedFund?.week_52_high ?? null
-          const db52l = cachedFund?.week_52_low ?? null
-
-          row.week_52_high = payload.week_52_high ?? db52h
-          row.week_52_low = payload.week_52_low ?? db52l
 
           const { error: upsertErr } = await supabase
             .from("fundamentals_cache")
@@ -444,14 +453,16 @@ Deno.serve(async (req) => {
             console.error(`[Sync] Upsert error into fundamentals_cache for ${sym}:`, JSON.stringify(upsertErr))
             errors++
           } else {
-            const epsNextEst = payload.eps_next_estimate
-            const epsNextPos = epsNextEst != null ? epsNextEst > 0 : null
+            // Usar los valores MERGED (no el payload crudo) para no degradar el universo
+            const mergedRev = row.revenue_growth_pct as number | null
+            const mergedEpsNext = (row.eps_next_estimate ?? row.eps_current) as number | null
+            const epsNextPos = mergedEpsNext != null ? mergedEpsNext > 0 : null
 
             // Update the live screener_universe row with newly fetched fundamental metrics
             const { error: univUpdateErr } = await supabase
               .from("screener_universe")
               .update({
-                revenue_growth_pct: payload.revenue_growth_pct,
+                revenue_growth_pct: mergedRev,
                 eps_next_positive: epsNextPos
               })
               .eq("symbol", sym)
@@ -797,8 +808,12 @@ async function fetchAlphaVantageFundamentals(symbol: string, avKey: string): Pro
       console.warn(`[Sync/AV] Global quote error for ${symbol}:`, e)
     }
 
-    const quarterlyRevenueGrowth = av.QuarterlyRevenueGrowthYOY != null ? parseFloat(av.QuarterlyRevenueGrowthYOY) : null;
-    const quarterlyEarningsGrowth = av.QuarterlyEarningsGrowthYOY != null ? parseFloat(av.QuarterlyEarningsGrowthYOY) : null;
+    // AV devuelve "None" como string en varios campos → parseFloat da NaN;
+    // NaN pasa un check `!= null` y JSON.stringify lo vuelve null en DB.
+    const qRevRaw = parseFloat(av.QuarterlyRevenueGrowthYOY ?? "")
+    const quarterlyRevenueGrowth = isNaN(qRevRaw) ? null : qRevRaw
+    const qEpsRaw = parseFloat(av.QuarterlyEarningsGrowthYOY ?? "")
+    const quarterlyEarningsGrowth = isNaN(qEpsRaw) ? null : qEpsRaw
 
     return {
       eps_current: n("EPS"),

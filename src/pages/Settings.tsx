@@ -98,6 +98,19 @@ export default function Settings() {
       const result = await response.json();
       if (result.valid) {
         setStatus('valid');
+        if (result.message) {
+          // Las keys NO se guardan en la DB (principio irrompible #1):
+          // informar dónde se configuran realmente (Secrets de Supabase).
+          window.dispatchEvent(
+            new CustomEvent('tradeos-toast', {
+              detail: {
+                title: 'Keys válidas',
+                message: result.message,
+                color: 'var(--color-primary)',
+              },
+            })
+          );
+        }
         if (broker === 'alpaca') setAlpacaKeys({ ...alpacaKeys, key: '', secret: '' });
         else setBinanceKeys({ ...binanceKeys, key: '', secret: '' });
       } else {
@@ -121,7 +134,7 @@ export default function Settings() {
         <section style={cardStyle}>
           <div style={cardHeaderStyle}>
             <Key size={18} color="var(--color-primary)" />
-            <h2 style={cardTitleStyle}>API Keys (Secured in Vault)</h2>
+            <h2 style={cardTitleStyle}>API Keys (validación de conexión)</h2>
           </div>
           
           <div style={sectionContentStyle}>

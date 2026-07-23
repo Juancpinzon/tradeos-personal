@@ -42,11 +42,21 @@ async function upsertFundamentals(
   symbol: string,
   payload: Record<string, unknown>,
 ) {
-  const { data: existing } = await supabase
+  const { data: existing, error: readErr } = await supabase
     .from("fundamentals_cache")
     .select("*")
     .eq("symbol", symbol)
     .maybeSingle();
+
+  // Si la lectura previa falla, NO escribir: un merge sin base degradaría a un
+  // upsert que pisa datos válidos con null.
+  if (readErr) {
+    console.error(
+      `[Cache] Lectura previa falló para ${symbol} — se omite escritura:`,
+      readErr.message,
+    );
+    return { ...payload, symbol };
+  }
 
   const merged: Record<string, unknown> = { ...(existing ?? {}), symbol };
   for (const [k, v] of Object.entries(payload)) {

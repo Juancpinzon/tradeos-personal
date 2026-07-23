@@ -257,9 +257,11 @@ Deno.serve(async (req: Request) => {
     // deno-lint-ignore no-explicit-any
     const applyBaseFilters = (q: any) => {
       if (criteria.symbol_query) {
-        q = q.or(
-          `symbol.ilike.%${criteria.symbol_query}%,name.ilike.%${criteria.symbol_query}%`,
-        );
+        // Sanitizar: coma/paréntesis/comillas rompen (o inyectan) filtros PostgREST
+        const sq = String(criteria.symbol_query).replace(/[,()."'\\]/g, "");
+        if (sq) {
+          q = q.or(`symbol.ilike.%${sq}%,name.ilike.%${sq}%`);
+        }
       }
       // Filas sin market cap conocido pasan este umbral: muchos nombres líquidos
       // entran al universo por dollar-volume y aún no tienen cap resuelto.
@@ -299,7 +301,7 @@ Deno.serve(async (req: Request) => {
     if (wantsEps) strictQ = strictQ.eq("eps_next_positive", true);
 
     const { data: strictRowsRaw, error: universeError } = await strictQ
-      .order("volume_avg_30d", { ascending: false, nullsLast: true })
+      .order("volume_avg_30d", { ascending: false, nullsFirst: false })
       .limit(200);
     if (universeError) {
       return errJson(`Universe query error: ${universeError.message}`, 500);
@@ -329,7 +331,7 @@ Deno.serve(async (req: Request) => {
         dq = dq.or("eps_next_positive.is.null,eps_next_positive.eq.true");
       }
       const { data: dRows } = await dq
-        .order("volume_avg_30d", { ascending: false, nullsLast: true })
+        .order("volume_avg_30d", { ascending: false, nullsFirst: false })
         .limit(40);
       const strictSet = new Set(strictRows.map((r) => r.symbol));
       discoveryRows = ((dRows ?? []) as UniverseRow[])
@@ -634,6 +636,7 @@ Deno.serve(async (req: Request) => {
       rsi_weekly: c.rsi_weekly,
       eps_next_estimate: c.eps_next_estimate,
       next_earnings_date: c.next_earnings_date,
+      volume_avg: c.volume_avg,
     }));
 
     const prompt = `Tengo estos ${candidateData.length} candidatos que pasaron los filtros del screener:
@@ -672,17 +675,25 @@ Respondé SOLO en JSON con este formato exacto (sin markdown, sin backticks):
       positions?.map((p: { symbol: string }) => p.symbol) || [],
     );
 
+    // Ignorar ítems que Claude haya devuelto fuera de los candidatos reales
+    // (evita filas sin symbol/price y mantiene honesto el contador).
     // deno-lint-ignore no-explicit-any
-    const finalItems = aiResult.items.map((item: any) => {
-      const candidate = candidateData.find((c) => c.symbol === item.symbol);
-      return {
-        ...candidate,
-        score: item.score,
-        ai_note: item.ai_note,
-        already_in_portfolio: portfolioSymbols.has(item.symbol),
-        already_in_watchlist: false,
-      };
-    });
+    const finalItems = (Array.isArray(aiResult.items) ? aiResult.items : [])
+      // deno-lint-ignore no-explicit-any
+      .filter((item: any) =>
+        candidateData.some((c) => c.symbol === item.symbol)
+      )
+      // deno-lint-ignore no-explicit-any
+      .map((item: any) => {
+        const candidate = candidateData.find((c) => c.symbol === item.symbol);
+        return {
+          ...candidate,
+          score: item.score,
+          ai_note: item.ai_note,
+          already_in_portfolio: portfolioSymbols.has(item.symbol),
+          already_in_watchlist: false,
+        };
+      });
 
     const screenerResult = {
       user_id: user.id,
