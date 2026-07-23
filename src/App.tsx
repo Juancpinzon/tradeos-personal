@@ -19,6 +19,7 @@ import Screener    from './pages/Screener'
 import FlightPlan  from './pages/FlightPlan'
 import Academy     from './pages/Academy'
 import History     from './pages/History'
+import Manual      from './pages/Manual'
 import Settings    from './pages/Settings'
 
 // ── TanStack Query client ─────────────────────────────────────────────────
@@ -75,6 +76,7 @@ function ProtectedRoutes() {
         <Route path="academy"     element={<Academy />}    />
         <Route path="screener"    element={<Screener />}   />
         <Route path="history"   element={<History />}   />
+        <Route path="manual"    element={<Manual />}    />
         <Route path="settings"  element={<Settings />}  />
       </Route>
     </Routes>

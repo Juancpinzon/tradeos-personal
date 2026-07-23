@@ -2,7 +2,7 @@
 
 ## Plataforma web de inversiones y trading NYSE + Cripto
 
-**Última actualización:** 01/06/26
+**Última actualización:** 23/07/26
 
 > **Agente**: Lee este archivo completo antes de escribir cualquier línea de código. Es tu contrato de comportamiento para todo el proyecto. No omitas secciones. No asumas lo que no está escrito aquí.
 
@@ -1238,6 +1238,30 @@ Nuevo ítem en Sidebar entre Journal y Screener: 📋 Plan de Vuelo → /flight-
 - [x] **Equity Chart Dinámico**: Incorporación de dominio de `YAxis` (`['auto', 'auto']`) en `EquityChart` para hacer zoom en variaciones de capital y evitar el efecto visual de "gráfico plano".
 - [x] **Snapshots de Equity**: Adición explícita de `snapshot_at` en la inserción fire-and-forget de la edge function `alpaca-proxy` (`GET /account`), resolviendo problemas de fallback.
 - [x] **CORS en FMP Proxy**: Despliegue optimizado de la edge function `fmp-proxy` con `--no-verify-jwt` para habilitar el paso exitoso de peticiones preflight (`OPTIONS`) requeridas en las solicitudes del browser al FMP Earnings Calendar.
+
+---
+
+## 🚀 Fase 15: Manual de Usuario Integrado [COMPLETADA - 23/07/26]
+
+- [x] **Manual maestro en `docs/manual_usuario.md`**: manual de usuario paso a paso para los dos objetivos centrales — (1) operar acciones y (2) generar opciones de inversión. Cinco secciones: Primer día en TradeOS (Dashboard, colores, Settings de riesgo), Flujo para generar opciones de inversión (Screener → Research → Plan de Vuelo), Flujo para operar (Plan de Vuelo → Trading → ConfirmOrderModal → Journal → post-mortem), Referencia rápida (tabla de 10 pantallas, reglas irrompibles, glosario: R/R, ATH dist, RSI semanal, Profit Factor, setup_type) y Ejemplo completo NVDA en 13 pasos. Redactado con los textos literales de la UI verificados contra el código (`REVISAR ORDEN`, `TIPO DE OPERACIÓN *`, `LISTO PARA DESPEGAR`, etc.); máximo 2 niveles de encabezado; sin capturas.
+- [x] **Pantalla `/manual`**: `src/pages/Manual.tsx` renderiza el mismo markdown como fuente única de verdad (import Vite `?raw` + `react-markdown` + `remark-gfm`, ya presentes en el stack) con el tema dark del sistema de diseño (`--bg-surface`, `--text-primary`, `--text-secondary`), índice sticky con numeración mono `01–05`, scroll-spy vía IntersectionObserver y navegación interna por anchors (ids `slugify` de cada `##`; chips horizontales en mobile). Ruta `manual` registrada en `App.tsx` e ítem `📖 Manual → /manual` agregado en `Sidebar.tsx` entre Historial y Settings.
+
+### Sidebar actualizado (10 rutas)
+
+```
+├── 📊 Dashboard        → /
+├── 📈 Trading          → /trading
+├── 🔍 Research         → /research
+├── 📓 Journal          → /journal
+├── 📋 Plan de Vuelo    → /flight-plan
+├── 🎓 Academia         → /academy
+├── 🎯 Screener         → /screener
+├── 📋 Historial        → /history
+├── 📖 Manual           → /manual         ← NUEVA
+└── ⚙️  Settings        → /settings
+```
+
+> Nota de fidelidad: el manual documenta la app real, no la spec histórica — el `JournalForm` se abre desde Journal → `Nueva entrada` y **precarga** tesis/stop/target/trade_type desde la orden ejecutada o el candidato del Plan de Vuelo (no se abre automáticamente tras confirmar la orden, a diferencia de lo descrito en Flujo 2 paso 8).
 
 ---
 

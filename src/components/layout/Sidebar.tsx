@@ -18,6 +18,7 @@ import {
   LogOut,
   ClipboardList,
   GraduationCap,
+  BookMarked,
   X,
 } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/academy',     label: 'Academia',      Icon: GraduationCap   },
   { to: '/screener',    label: 'Screener',      Icon: Target          },
   { to: '/history',     label: 'Historial',     Icon: History         },
+  { to: '/manual',      label: 'Manual',        Icon: BookMarked      },
   { to: '/settings',    label: 'Settings',      Icon: Settings        },
 ]
 
