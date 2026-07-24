@@ -31,6 +31,7 @@ export function ScreenerPanel() {
               revenue_growth_min_pct: 20,
               volume_avg_min: 200000,
               ath_distance_max_pct: -20,
+              price_max: 400,
               eps_next_positive: true,
               asset_class: "equity",
             },
@@ -40,6 +41,7 @@ export function ScreenerPanel() {
             criteria: {
               market_cap_min: 1000000000,
               price_min: 10,
+              price_max: 400,
               ath_distance_max_pct: -10,
               rsi_weekly_min: 50,
               rsi_weekly_max: 70,

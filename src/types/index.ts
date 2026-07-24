@@ -283,6 +283,7 @@ export interface ScreenerUniverse {
 export interface ScreenerCriteria {
   market_cap_min?: number;
   price_min?: number;
+  price_max?: number;
   revenue_growth_min_pct?: number;
   volume_avg_min?: number;
   eps_next_positive: boolean;

@@ -228,6 +228,18 @@ export function ScreenerCriteriaForm() {
           />
         </div>
 
+        {/* Price Max */}
+        <div style={sectionStyle}>
+          <label style={labelStyle}>Precio Máximo ($)</label>
+          <input
+            type="number"
+            name="price_max"
+            value={activeCriteria.price_max || ''}
+            onChange={handleChange}
+            style={inputStyle}
+          />
+        </div>
+
         {/* Toggles */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <label style={checkboxLabelStyle}>

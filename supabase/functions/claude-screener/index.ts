@@ -271,6 +271,7 @@ Deno.serve(async (req: Request) => {
         );
       }
       if (criteria.price_min) q = q.gte("price", criteria.price_min);
+      if (criteria.price_max) q = q.lte("price", criteria.price_max);
       if (criteria.volume_avg_min) {
         q = q.gte("volume_avg_30d", criteria.volume_avg_min);
       }
