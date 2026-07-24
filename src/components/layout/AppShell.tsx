@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from 'react'
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   TrendingUp,
@@ -15,6 +15,8 @@ import {
   Menu,
 } from 'lucide-react'
 import Sidebar from './Sidebar'
+import { HelpPanel } from '../help/HelpPanel'
+import { HELP_TOPICS } from '../../data/manualContent'
 import { useAuth } from '../../hooks/useAuth'
 import { useJournal } from '../../hooks/useJournal'
 import { usePriceAlerts } from '../../hooks/usePriceAlerts'
@@ -35,9 +37,13 @@ export default function AppShell() {
   const { user, signOut } = useAuth()
   const { entries } = useJournal()
   const isMobile = useMediaQuery('(max-width: 767px)')
+  const location = useLocation()
   usePriceAlerts()
 
   const pendingCount = entries.filter(e => e.order_id && !e.outcome).length
+
+  // Ayuda contextual: solo en pantallas con tema de ayuda definido
+  const helpTopic = HELP_TOPICS[location.pathname] ? location.pathname : null
 
   // Auto-close drawer when viewport goes desktop
   useEffect(() => {
@@ -140,6 +146,21 @@ export default function AppShell() {
             <span className="badge badge-paper" style={{ fontSize: '0.5rem' }}>
               PAPER
             </span>
+          </div>
+        )}
+
+        {/* Botón (?) de ayuda contextual — esquina superior derecha del contenido.
+            Fijo al viewport: el sidebar está a la izquierda, no afecta el borde derecho. */}
+        {helpTopic && (
+          <div
+            style={{
+              position: 'fixed',
+              top: isMobile ? '62px' : '14px',
+              right: isMobile ? '12px' : '18px',
+              zIndex: 45,
+            }}
+          >
+            <HelpPanel topic={helpTopic} />
           </div>
         )}
 
